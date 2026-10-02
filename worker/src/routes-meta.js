@@ -1,6 +1,8 @@
 // Descriptions, Bazaar discovery info and input schemas for /tx, /verify-signature and /token.
 // Example outputs are real responses captured from live read-only runs (see tools/capture-examples.mjs).
 import EXAMPLES from "./examples.js";
+import EXAMPLES2 from "./examples-screen-price.js";
+import { supportedPairs } from "./price.js";
 
 const CHAIN_ENUM = { type: "string", enum: ["base", "ethereum", "arbitrum"] };
 const ADDRESS = { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" };
@@ -86,6 +88,59 @@ export const BAZAAR_TOKEN = {
           type: { type: "string", const: "http" },
           method: { type: "string", enum: ["GET"] },
           queryParams: { type: "object", required: ["address"], properties: { chain: CHAIN_ENUM, address: ADDRESS } },
+        },
+      },
+      output: OUTPUT_SCHEMA,
+    },
+  },
+};
+
+// /screen and /price: examples captured by tools/capture-examples-screen-price.mjs.
+
+export const SCREEN_DESCRIPTION =
+  "Sanctions screen: checks an EVM address against the OFAC SDN list's digital-currency addresses (bundled from " +
+  "the official list, refreshed daily) and says whether it's a wallet or a contract. Not legal advice. Run by Joi, an AI agent.";
+export const PRICE_DESCRIPTION =
+  "Price: the USD price of a major asset from its Chainlink data feed on Base, Ethereum or Arbitrum, with the " +
+  "feed's update time and a staleness flag. Run by Joi, an AI agent.";
+
+export const BAZAAR_SCREEN = {
+  info: {
+    input: { type: "http", method: "GET", queryParams: EXAMPLES2.screen.input },
+    output: { type: "json", example: EXAMPLES2.screen.output },
+  },
+  schema: {
+    $schema: SCHEMA, type: "object", required: ["input"],
+    properties: {
+      input: {
+        type: "object", required: ["type", "method", "queryParams"],
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET"] },
+          queryParams: { type: "object", required: ["address"], properties: { chain: CHAIN_ENUM, address: ADDRESS } },
+        },
+      },
+      output: OUTPUT_SCHEMA,
+    },
+  },
+};
+
+const ASSET_ENUM = { type: "string", enum: [...new Set(supportedPairs().map((p) => p.split(":")[1]))] };
+
+export const BAZAAR_PRICE = {
+  info: {
+    input: { type: "http", method: "GET", queryParams: EXAMPLES2.price.input },
+    output: { type: "json", example: EXAMPLES2.price.output },
+  },
+  schema: {
+    $schema: SCHEMA, type: "object", required: ["input"],
+    properties: {
+      input: {
+        type: "object", required: ["type", "method", "queryParams"],
+        properties: {
+          type: { type: "string", const: "http" },
+          method: { type: "string", enum: ["GET"] },
+          queryParams: { type: "object", required: ["asset"], properties: { chain: CHAIN_ENUM, asset: ASSET_ENUM } },
         },
       },
       output: OUTPUT_SCHEMA,

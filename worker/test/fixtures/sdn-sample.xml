@@ -1,0 +1,72 @@
+<?xml version="1.0" standalone="yes"?>
+<sdnList xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <publshInformation>
+    <Publish_Date>09/28/2026</Publish_Date>
+    <Record_Count>3</Record_Count>
+  </publshInformation>
+  <sdnEntry>
+    <uid>900001</uid>
+    <lastName>EXAMPLE SHIPPING LTD</lastName>
+    <sdnType>Entity</sdnType>
+    <programList>
+      <program>TESTPROG</program>
+    </programList>
+    <idList>
+      <id>
+        <uid>1</uid>
+        <idType>Digital Currency Address - ETH</idType>
+        <idNumber>0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa</idNumber>
+      </id>
+      <id>
+        <uid>2</uid>
+        <idType>Digital Currency Address - USDT</idType>
+        <idNumber>0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa</idNumber>
+      </id>
+      <id>
+        <uid>3</uid>
+        <idType>Digital Currency Address - USDT</idType>
+        <idNumber>TXyzTronAddressNotEvm1234567890abc</idNumber>
+      </id>
+      <id>
+        <uid>4</uid>
+        <idType>Digital Currency Address - XBT</idType>
+        <idNumber>1ExampleBitcoinAddressNotEvm12345</idNumber>
+      </id>
+    </idList>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>900002</uid>
+    <firstName>Jane</firstName>
+    <lastName>DOE</lastName>
+    <sdnType>Individual</sdnType>
+    <programList>
+      <program>PROG-B</program>
+      <program>PROG-A</program>
+    </programList>
+    <idList>
+      <id>
+        <uid>5</uid>
+        <idType>Email Address</idType>
+        <idNumber>jane@example.invalid</idNumber>
+      </id>
+      <id>
+        <uid>6</uid>
+        <idType>Digital Currency Address - ARB</idType>
+        <idNumber>0xBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBbBb</idNumber>
+      </id>
+      <id>
+        <uid>7</uid>
+        <idType>Digital Currency Address - ETH</idType>
+        <idNumber>0x123</idNumber>
+      </id>
+    </idList>
+  </sdnEntry>
+  <sdnEntry>
+    <uid>900003</uid>
+    <lastName>NO CRYPTO ENTITY</lastName>
+    <sdnType>Entity</sdnType>
+    <programList>
+      <program>TESTPROG</program>
+    </programList>
+  </sdnEntry>
+</sdnList>

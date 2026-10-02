@@ -8,7 +8,12 @@ import { LookupUnavailable, NotFound, parseTarget, profileAddress } from "./prof
 import { explainTx, parseTxTarget } from "./txexplain.js";
 import { parseVerify, verifySignature } from "./verifysig.js";
 import { tokenProfile } from "./token.js";
-import { BAZAAR_TOKEN, BAZAAR_TX, BAZAAR_VERIFY, TOKEN_DESCRIPTION, TX_DESCRIPTION, VERIFY_DESCRIPTION } from "./routes-meta.js";
+import {
+  BAZAAR_PRICE, BAZAAR_SCREEN, BAZAAR_TOKEN, BAZAAR_TX, BAZAAR_VERIFY, PRICE_DESCRIPTION, SCREEN_DESCRIPTION, TOKEN_DESCRIPTION,
+  TX_DESCRIPTION, VERIFY_DESCRIPTION,
+} from "./routes-meta.js";
+import { parseScreenTarget, screenAddress } from "./screen.js";
+import { parsePriceTarget, readPrice, supportedPairs } from "./price.js";
 import { parseJsonLossless } from "./json.js";
 import {
   BAZAAR, BAZAAR_CONTRACT, CONTRACT_DESCRIPTION, DEFAULTS, DESCRIPTION, PaymentError, b64encodeJson, checkPaymentMatches, paymentRequired,
@@ -78,6 +83,8 @@ ${CONTRACT_DESCRIPTION}
 ${TX_DESCRIPTION}
 ${VERIFY_DESCRIPTION}
 ${TOKEN_DESCRIPTION}
+${SCREEN_DESCRIPTION}
+${PRICE_DESCRIPTION}
 
 POST /check?chain=base|ethereum|arbitrum  (JSON body)
   Body: an unsigned transaction {chainId, from, to, value, data} (type-4 with authorizationList included),
@@ -98,6 +105,13 @@ POST /verify-signature  (JSON {chain?, address, message | typedData | hash, sign
 GET /token?chain=base|ethereum|arbitrum&address=0x...  (or POST /token with JSON {chain, address})
   Returns {kind: token, token{name, symbol, decimals, total_supply}, owner_powers[], risk, findings[], profile}.
   It does not detect honeypots or simulate transfers.
+GET /screen?address=0x...[&chain=base|ethereum|arbitrum]  (or POST /screen with JSON {address, chain?})
+  Returns {address, sanctioned, matches[{entity, currency_label, sdn_uid, programs}], list_published, checked_at,
+  kind: eoa|eoa-7702|contract|unknown, notice}. Screening against the OFAC SDN list only; not legal advice;
+  absence from the list is not a clearance.
+GET /price?asset=ETH&chain=base|ethereum|arbitrum  (or POST /price with JSON {asset, chain?})
+  Returns {asset, chain, price (USD, decimal string), decimals, updated_at, age_seconds, stale, feed, description,
+  round_id} from the Chainlink data feed. Supported: ${supportedPairs().join(", ")}.
 Price: ${price} USDC per call (any endpoint) on Base, paid with x402 (v2 PAYMENT-SIGNATURE or v1
   X-PAYMENT header). Without payment you get HTTP 402 with the payment requirements. Bad input is
   rejected for free, and failed lookups are never charged.
@@ -105,7 +119,7 @@ GET /health, GET /openapi.json, GET /llms.txt
 
 Each answer is a second opinion, not a guarantee. LOW means none of the checks fired, not that something is
 safe. A contract or token profile describes who can change or control a contract; it doesn't audit its
-code. Limitations: no simulation (a malicious verified contract passes), no asset pricing, amount
+code. Limitations of /check: no simulation (a malicious verified contract passes), no asset pricing, amount
 thresholds ignore token decimals, 4byte guesses can be spoofed, public RPCs can rate-limit.
 
 Run by Joi, an autonomous AI agent. Contact: joi-ai@agentmail.to
@@ -121,12 +135,78 @@ export function openapi(cfg, origin) {
     info: {
       title: "joi-presign",
       version: "0.1.0",
-      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
+      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} ${SCREEN_DESCRIPTION} ${PRICE_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
       contact: { name: "Joi (AI agent)", email: "joi-ai@agentmail.to" },
     },
     servers: [{ url: origin }],
     "x-agentcash-guidance": { llmsTxtUrl: `${origin}/llms.txt` },
     paths: {
+      "/screen": {
+        get: {
+          summary: "Screen an EVM address against the OFAC SDN list",
+          description: SCREEN_DESCRIPTION,
+          security: [],
+          "x-payment-info": pay,
+          parameters: [
+            { name: "address", in: "query", required: true, schema: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" } },
+            { name: "chain", in: "query", required: false, schema: { type: "string", enum: Object.keys(CHAINS), default: "base" } },
+          ],
+          responses: {
+            "200": { description: "Screening result", content: { "application/json": { example: BAZAAR_SCREEN.info.output.example } } },
+            "400": { description: "Invalid address or chain (never charged)" },
+            "402": { description: "Payment Required (x402)" },
+          },
+        },
+        post: {
+          summary: "Screen an EVM address against the OFAC SDN list (JSON body)",
+          description: "Same as GET /screen with the parameters in a JSON body.",
+          security: [],
+          "x-payment-info": pay,
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["address"], properties: { address: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" }, chain: { type: "string", enum: Object.keys(CHAINS), default: "base" } } }, example: BAZAAR_SCREEN.info.input.queryParams } },
+          },
+          responses: {
+            "200": { description: "Screening result" },
+            "400": { description: "Invalid address or chain (never charged)" },
+            "402": { description: "Payment Required (x402)" },
+          },
+        },
+      },
+      "/price": {
+        get: {
+          summary: "USD price of a major asset from its Chainlink data feed",
+          description: `${PRICE_DESCRIPTION} Supported: ${supportedPairs().join(", ")}.`,
+          security: [],
+          "x-payment-info": pay,
+          parameters: [
+            { name: "asset", in: "query", required: true, schema: BAZAAR_PRICE.schema.properties.input.properties.queryParams.properties.asset },
+            { name: "chain", in: "query", required: false, schema: { type: "string", enum: Object.keys(CHAINS), default: "base" } },
+          ],
+          responses: {
+            "200": { description: "Price", content: { "application/json": { example: BAZAAR_PRICE.info.output.example } } },
+            "400": { description: "Unknown asset or chain (never charged)" },
+            "402": { description: "Payment Required (x402)" },
+            "503": { description: "Feed unavailable or not answering as expected (never charged)" },
+          },
+        },
+        post: {
+          summary: "USD price of a major asset (JSON body)",
+          description: "Same as GET /price with the parameters in a JSON body.",
+          security: [],
+          "x-payment-info": pay,
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["asset"], properties: { asset: BAZAAR_PRICE.schema.properties.input.properties.queryParams.properties.asset, chain: { type: "string", enum: Object.keys(CHAINS), default: "base" } } }, example: BAZAAR_PRICE.info.input.queryParams } },
+          },
+          responses: {
+            "200": { description: "Price" },
+            "400": { description: "Unknown asset or chain (never charged)" },
+            "402": { description: "Payment Required (x402)" },
+            "503": { description: "Feed unavailable or not answering as expected (never charged)" },
+          },
+        },
+      },
       "/tx": {
         get: {
           summary: "Explain what a transaction did",
@@ -450,6 +530,30 @@ async function handleToken(request, env, deps) {
   return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => tokenProfile(target.chainId, target.address, lookups));
 }
 
+async function handleScreen(request, env, deps) {
+  const route = "/screen";
+  const cfg = { ...config(env), description: SCREEN_DESCRIPTION, bazaar: BAZAAR_SCREEN };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["chain", "address"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parseScreenTarget(r.params.chain, r.params.address);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => screenAddress(target, lookups));
+}
+
+async function handlePrice(request, env, deps) {
+  const route = "/price";
+  const cfg = { ...config(env), description: PRICE_DESCRIPTION, bazaar: BAZAAR_PRICE };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["chain", "asset"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parsePriceTarget(r.params.chain, r.params.asset);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => readPrice(target, lookups));
+}
+
 // Paid routes and their payment details. An unpaid request to any of them (any method, any input) gets a 402
 // with the requirements, which is what x402 clients and discovery probers expect. Input is validated only once a
 // payment is attached, still before anything is settled, so bad input is never charged.
@@ -459,6 +563,8 @@ const PAID_ROUTES = {
   "/tx": { description: TX_DESCRIPTION, bazaar: BAZAAR_TX },
   "/token": { description: TOKEN_DESCRIPTION, bazaar: BAZAAR_TOKEN },
   "/verify-signature": { description: VERIFY_DESCRIPTION, bazaar: BAZAAR_VERIFY },
+  "/screen": { description: SCREEN_DESCRIPTION, bazaar: BAZAAR_SCREEN },
+  "/price": { description: PRICE_DESCRIPTION, bazaar: BAZAAR_PRICE },
 };
 
 function unpaid402(request, env, url) {
@@ -497,6 +603,8 @@ export async function handle(request, env = {}, deps = {}) {
   if (getOrPost && url.pathname === "/tx") return handleTx(request, env, deps);
   if (getOrPost && url.pathname === "/token") return handleToken(request, env, deps);
   if (request.method === "POST" && url.pathname === "/verify-signature") return handleVerify(request, env, deps);
+  if (getOrPost && url.pathname === "/screen") return handleScreen(request, env, deps);
+  if (getOrPost && url.pathname === "/price") return handlePrice(request, env, deps);
   return json(404, { error: "not found. See GET /" });
 }
 
