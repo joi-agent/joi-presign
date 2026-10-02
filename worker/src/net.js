@@ -84,6 +84,49 @@ export class NetLookups {
     return result;
   }
 
+  /** Runtime bytecode as 0x-hex, or null if unknown. Shares the eth_getCode memo with codeKind. */
+  async getCode(chainId, a) {
+    const code = await this.rpc(chainId, "eth_getCode", [a, "latest"]);
+    return typeof code === "string" && /^0x[0-9a-f]*$/i.test(code) ? code.toLowerCase() : null;
+  }
+
+  /** Native balance in wei as a BigInt, or null if unknown. */
+  async balance(chainId, a) {
+    const v = await this.rpc(chainId, "eth_getBalance", [a, "latest"]);
+    return typeof v === "string" && /^0x[0-9a-f]+$/i.test(v) ? BigInt(v) : null;
+  }
+
+  /** A 32-byte storage word as 0x-hex, or null if unknown. */
+  async getStorageAt(chainId, a, slot) {
+    const v = await this.rpc(chainId, "eth_getStorageAt", [a, slot, "latest"]);
+    return typeof v === "string" && /^0x[0-9a-f]{1,64}$/i.test(v) ? "0x" + v.slice(2).toLowerCase().padStart(64, "0") : null;
+  }
+
+  /** eth_call return data as 0x-hex, or null on revert or failure. */
+  async ethCall(chainId, to, data) {
+    const v = await this.rpc(chainId, "eth_call", [{ to, data }, "latest"]);
+    return typeof v === "string" && /^0x[0-9a-f]*$/i.test(v) ? v.toLowerCase() : null;
+  }
+
+  /** {verified: true|false|null, name: string|null} from Sourcify, including the contract name when verified. */
+  async sourcifyInfo(chainId, a) {
+    const key = `sourcify-info:${chainId}:${a.toLowerCase()}`;
+    if (this.memo.has(key)) return this.memo.get(key);
+    let result = { verified: null, name: null };
+    try {
+      const r = await this.request(SOURCIFY(chainId, a) + "?fields=compilation");
+      if (r.status === 404) result = { verified: false, name: null };
+      else if (r.ok) {
+        const d = await r.json();
+        const verified = ["match", "exact_match", "partial", "perfect"].includes(d.match);
+        const name = verified && d.compilation && typeof d.compilation.name === "string" ? d.compilation.name : null;
+        result = { verified, name };
+      }
+    } catch { /* unknown */ }
+    this.memo.set(key, result);
+    return result;
+  }
+
   /** Text signatures for a selector, oldest registration first (newer ones are often spam). */
   async selectorSignatures(sel) {
     if (fourbyteCache.has(sel)) return fourbyteCache.get(sel);

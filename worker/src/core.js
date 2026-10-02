@@ -30,7 +30,7 @@ export const KNOWN_DELEGATES = {
   "0x7702cb554e6bFb442cb743A7dF23154544a7176C": "Coinbase EIP7702Proxy",
 };
 
-class Report {
+export class Report {
   constructor() { this.findings = []; }
   add(code, severity, message) {
     if (!this.findings.some((f) => f.code === code && f.severity === severity && f.message === message)) {

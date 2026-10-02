@@ -59,7 +59,7 @@ export function requirementsV1(cfg, resourceUrl) {
     asset: cfg.asset,
     payTo: cfg.payTo,
     resource: resourceUrl,
-    description: DESCRIPTION,
+    description: cfg.description || DESCRIPTION,
     mimeType: "application/json",
     outputSchema: null,
     maxTimeoutSeconds: cfg.maxTimeoutSeconds,
@@ -105,13 +105,88 @@ export const BAZAAR = {
   },
 };
 
+export const CONTRACT_DESCRIPTION =
+  "Contract profile: what is at this address (wallet, 7702-delegated wallet, contract), is the source verified, " +
+  "is it an upgradeable proxy and who can upgrade it, who owns it. Run by Joi, an AI agent.";
+
+// Example output: a real profile of USDC on Base, captured 2026-10-02.
+export const BAZAAR_CONTRACT = {
+  "info": {
+    "input": {
+      "type": "http",
+      "method": "GET",
+      "queryParams": {
+        "chain": "base",
+        "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      }
+    },
+    "output": {
+      "type": "json",
+      "example": {
+        "kind": "contract",
+        "chain_id": 8453,
+        "risk": "MEDIUM",
+        "findings": [
+          {
+            "code": "SOURCE_VERIFIED",
+            "severity": "INFO",
+            "message": "Source verified on Sourcify as FiatTokenProxy."
+          },
+          {
+            "code": "UPGRADEABLE_PROXY",
+            "severity": "MEDIUM",
+            "message": "Upgradeable proxy (ZeppelinOS-style): whoever controls the upgrade can replace this contract's code at any time, including with code that takes funds approved to it."
+          },
+          {
+            "code": "ADMIN_IS_EOA",
+            "severity": "MEDIUM",
+            "message": "The proxy admin 0x4fc7850364958d97B4d3f5A08f79db2493f8cA44 is a single wallet (EOA): one private key can upgrade this contract."
+          },
+          {
+            "code": "IMPLEMENTATION_VERIFIED",
+            "severity": "INFO",
+            "message": "Implementation 0x2Ce6311ddAE708829bc0784C967b7d77D19FD779 is verified on Sourcify as FiatTokenV2_2."
+          },
+          {
+            "code": "OWNER_IS_EOA",
+            "severity": "MEDIUM",
+            "message": "owner() is 0x3ABd6f64A422225E61E435baE41db12096106df7, a single wallet (EOA): one private key controls the owner-only functions."
+          }
+        ],
+        "profile": {
+          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "chain": "base",
+          "code_size": 1852,
+          "verified": true,
+          "name": "FiatTokenProxy",
+          "proxy": {
+            "type": "zeppelinos",
+            "implementation": "0x2Ce6311ddAE708829bc0784C967b7d77D19FD779",
+            "admin": "0x4fc7850364958d97B4d3f5A08f79db2493f8cA44",
+            "admin_kind": "eoa",
+            "implementation_has_code": true,
+            "implementation_verified": true,
+            "implementation_name": "FiatTokenV2_2"
+          },
+          "owner": {
+            "function": "owner()",
+            "address": "0x3ABd6f64A422225E61E435baE41db12096106df7",
+            "kind": "eoa"
+          }
+        }
+      }
+    }
+  }
+};
+
+
 export function paymentRequired(cfg, resourceUrl, error) {
   return {
     x402Version: 2,
     error,
-    resource: { url: resourceUrl, description: DESCRIPTION, mimeType: "application/json" },
+    resource: { url: resourceUrl, description: cfg.description || DESCRIPTION, mimeType: "application/json" },
     accepts: [requirementsV2(cfg)],
-    extensions: { bazaar: BAZAAR },
+    extensions: { bazaar: cfg.bazaar || BAZAAR },
   };
 }
 

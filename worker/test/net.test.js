@@ -84,3 +84,31 @@ test("timeout aborts a hanging request", async () => {
   assert.equal(await L.codeKind(1, a("0x01")), null);
   assert.ok(Date.now() - t0 < 1000);
 });
+
+test("getCode, getStorageAt, ethCall and balance parse results and degrade to null", async () => {
+  const L = new NetLookups({ fetchFn: fakeFetch([
+    ["publicnode", '"eth_getCode"', { result: "0x6080604052" }],
+    ["publicnode", '"eth_getStorageAt"', { result: "0x2ce6311ddae708829bc0784c967b7d77d19fd779" }],
+    ["publicnode", '"0x8da5cb5b"', { error: { code: 3, message: "execution reverted" } }],
+    ["publicnode", '"0x5c60da1b"', { result: "0x" + "00".repeat(12) + "ab".repeat(20) }],
+    ["publicnode", '"eth_getBalance"', { result: "0x2386f26fc10000" }],
+  ]) });
+  assert.equal(await L.getCode(1, a("0xaaaa")), "0x6080604052");
+  assert.equal(await L.getStorageAt(1, a("0xaaaa"), "0x01"), "0x" + "0".repeat(24) + "2ce6311ddae708829bc0784c967b7d77d19fd779");
+  assert.equal(await L.ethCall(1, a("0xaaaa"), "0x8da5cb5b"), null);
+  assert.equal(await L.ethCall(1, a("0xaaaa"), "0x5c60da1b"), "0x" + "00".repeat(12) + "ab".repeat(20));
+  assert.equal(await L.balance(1, a("0xaaaa")), 10n ** 16n);
+  assert.equal(await L.getCode(999, a("0xaaaa")), null);
+});
+
+test("sourcifyInfo returns verification and the contract name; 404 = unverified; errors = unknown", async () => {
+  const L = new NetLookups({ fetchFn: fakeFetch([
+    ["sourcify.dev/server/v2/contract/1/" + a("0xaaaa"), null, { match: "exact_match", compilation: { name: "Permit2" } }],
+    ["sourcify.dev/server/v2/contract/1/" + a("0xbbbb"), null, 404],
+    ["sourcify.dev/server/v2/contract/1/" + a("0xcccc"), null, 500],
+  ]) });
+  assert.deepEqual(await L.sourcifyInfo(1, a("0xaaaa")), { verified: true, name: "Permit2" });
+  assert.deepEqual(await L.sourcifyInfo(1, a("0xbbbb")), { verified: false, name: null });
+  assert.deepEqual(await L.sourcifyInfo(1, a("0xcccc")), { verified: null, name: null });
+  assert.ok(L.memo.has(`sourcify-info:1:${a("0xaaaa").toLowerCase()}`));
+});

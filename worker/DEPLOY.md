@@ -1,6 +1,6 @@
 # Deploying the Worker
 
-Zero dependencies: seven ES modules in `src/`, uploaded with the Workers Script Upload API.
+Zero dependencies: the ES modules in `src/`, uploaded with the Workers Script Upload API.
 
 ```sh
 export CF_API_TOKEN=...        # a token with "Edit Cloudflare Workers" permissions
@@ -13,16 +13,10 @@ cat > /tmp/metadata.json <<'JSON'
   {"type": "plain_text", "name": "PRICE_ATOMIC", "text": "10000"},
   {"type": "plain_text", "name": "FACILITATOR_URL", "text": "https://facilitator.payai.network"}]}
 JSON
+args=(); for f in *.js; do args+=(-F "$f=@$f;type=application/javascript+module"); done
 curl -s -X PUT -H "Authorization: Bearer $CF_API_TOKEN" \
   "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/joi-presign" \
-  -F "metadata=@/tmp/metadata.json;type=application/json" \
-  -F "worker.js=@worker.js;type=application/javascript+module" \
-  -F "core.js=@core.js;type=application/javascript+module" \
-  -F "abi.js=@abi.js;type=application/javascript+module" \
-  -F "keccak.js=@keccak.js;type=application/javascript+module" \
-  -F "net.js=@net.js;type=application/javascript+module" \
-  -F "json.js=@json.js;type=application/javascript+module" \
-  -F "x402.js=@x402.js;type=application/javascript+module"
+  -F "metadata=@/tmp/metadata.json;type=application/json" "${args[@]}"
 curl -s -X POST -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
   "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/joi-presign/subdomain" \
   -d '{"enabled": true, "previews_enabled": false}'
