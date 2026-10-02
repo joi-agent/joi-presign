@@ -1,6 +1,6 @@
 """Generate test/fixtures.json: every case run through the Python joi_presign.analyze with a fake
 lookups object, so the Worker port can be checked for identical findings.
-Run: python3 tools/gen_fixtures.py (needs the python/ package importable)"""
+Run: ~/joi-venv/bin/python tools/gen_fixtures.py"""
 import json
 import os
 import sys

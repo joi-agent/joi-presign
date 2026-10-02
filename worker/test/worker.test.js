@@ -178,7 +178,7 @@ test("GET / describes the service honestly, /health works, CORS preflight", asyn
 });
 
 test("oversized body is refused", async () => {
-  const r = await handle(post("{" + " ".repeat(70 * 1024) + "}"), {}, deps(facilitator()));
+  const r = await handle(post("{" + " ".repeat(70 * 1024) + "}", { "PAYMENT-SIGNATURE": "eyJ4IjoxfQ==" }), {}, deps(facilitator()));
   assert.equal(r.status, 413);
 });
 
@@ -224,4 +224,21 @@ test("Bazaar extensions carry an input JSON schema for both routes", async () =>
   assert.equal(BAZAAR.schema.properties.input.properties.method.enum[0], "POST");
   assert.deepEqual(BAZAAR_CONTRACT.schema.properties.input.properties.queryParams.required, ["address"]);
   assert.ok(BAZAAR.info && BAZAAR_CONTRACT.info);
+});
+
+
+test("unpaid probes: any method and no input on a paid route get 402 with requirements (HEAD without a body)", async () => {
+  _resetRateLimit();
+  const base = "https://joi-presign.example";
+  for (const path of ["/check", "/contract", "/tx", "/token", "/verify-signature"]) {
+    for (const method of ["GET", "HEAD", "POST"]) {
+      const r = await handle(new Request(base + path, { method }), {}, deps(facilitator()));
+      assert.equal(r.status, 402, `${method} ${path}`);
+      const pr = b64decodeJson(r.headers.get("PAYMENT-REQUIRED"));
+      assert.equal(pr.resource.url, base + path);
+      assert.equal(pr.accepts[0].payTo, DEFAULTS.payTo);
+      assert.ok(pr.extensions.bazaar.info);
+      if (method === "HEAD") assert.equal(await r.text(), "");
+    }
+  }
 });

@@ -450,6 +450,29 @@ async function handleToken(request, env, deps) {
   return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => tokenProfile(target.chainId, target.address, lookups));
 }
 
+// Paid routes and their payment details. An unpaid request to any of them (any method, any input) gets a 402
+// with the requirements, which is what x402 clients and discovery probers expect. Input is validated only once a
+// payment is attached, still before anything is settled, so bad input is never charged.
+const PAID_ROUTES = {
+  "/check": { description: DESCRIPTION, bazaar: BAZAAR },
+  "/contract": { description: CONTRACT_DESCRIPTION, bazaar: BAZAAR_CONTRACT },
+  "/tx": { description: TX_DESCRIPTION, bazaar: BAZAAR_TX },
+  "/token": { description: TOKEN_DESCRIPTION, bazaar: BAZAAR_TOKEN },
+  "/verify-signature": { description: VERIFY_DESCRIPTION, bazaar: BAZAAR_VERIFY },
+};
+
+function unpaid402(request, env, url) {
+  const cfg = { ...config(env), ...PAID_ROUTES[url.pathname] };
+  const resourceUrl = url.origin + url.pathname;
+  const error = "PAYMENT-SIGNATURE header is required";
+  const headers = { "PAYMENT-REQUIRED": b64encodeJson(paymentRequired(cfg, resourceUrl, error)) };
+  logOutcome(url.pathname, "unpaid_402");
+  if (request.method === "HEAD") {
+    return new Response(null, { status: 402, headers: { "Cache-Control": "no-store", ...CORS, ...headers } });
+  }
+  return json(402, paymentRequiredV1Body(cfg, resourceUrl, error), headers);
+}
+
 export async function handle(request, env = {}, deps = {}) {
   deps = { fetch: deps.fetch || ((...a) => fetch(...a)), lookups: deps.lookups };
   const url = new URL(request.url);
@@ -463,6 +486,10 @@ export async function handle(request, env = {}, deps = {}) {
   if (request.method === "GET" && url.pathname === "/openapi.json") return json(200, openapi(config(env), url.origin));
   if (request.method === "GET" && url.pathname === "/llms.txt") {
     return new Response(about(config(env)), { headers: { "Content-Type": "text/plain; charset=utf-8", ...CORS } });
+  }
+  const hasPayment = request.headers.get("PAYMENT-SIGNATURE") || request.headers.get("X-PAYMENT");
+  if (PAID_ROUTES[url.pathname] && ["GET", "HEAD", "POST"].includes(request.method) && !hasPayment) {
+    return unpaid402(request, env, url);
   }
   if (request.method === "POST" && url.pathname === "/check") return handleCheck(request, env, deps);
   const getOrPost = request.method === "GET" || request.method === "POST";

@@ -64,7 +64,7 @@ function captureLogs() {
 
 test.beforeEach(() => _resetRateLimit());
 
-test("bad input on every new route: 400 before payment, never reaches the facilitator, logged as bad_input", async () => {
+test("bad input on every new route (payment attached): 400 before verifying payment, never reaches the facilitator, logged as bad_input", async () => {
   const fac = facilitator();
   const deps = { fetch: fac, lookups: () => new FakeChain() };
   const cases = [
@@ -80,7 +80,9 @@ test("bad input on every new route: 400 before payment, never reaches the facili
   const logs = captureLogs();
   try {
     for (const req of cases) {
-      const r = await handle(req, {}, deps);
+      // A payment is attached: input is validated before the facilitator is ever called.
+      const paid = new Request(req, { headers: { ...Object.fromEntries(req.headers), "PAYMENT-SIGNATURE": "eyJ4IjoxfQ==" } });
+      const r = await handle(paid, {}, deps);
       assert.equal(r.status, 400, req.url);
       assert.ok((await r.json()).error);
     }
