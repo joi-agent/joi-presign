@@ -273,3 +273,49 @@ export async function settlePayment(cfg, resourceUrl, payment, fetchFn = fetch, 
   } catch { /* fall through */ }
   return { success: false, errorReason: "unexpected_settle_error", transaction: "", network: payment.version === 2 ? cfg.network : cfg.v1Network };
 }
+
+// JSON Schemas for the Bazaar "schema" field (x402 bazaar v2), so agents know how to call each route.
+const CHAIN_ENUM = { type: "string", enum: ["base", "ethereum", "arbitrum"] };
+BAZAAR.schema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  required: ["input"],
+  properties: {
+    input: {
+      type: "object",
+      required: ["type", "method", "bodyType", "body"],
+      properties: {
+        type: { type: "string", const: "http" },
+        method: { type: "string", enum: ["POST"] },
+        queryParams: { type: "object", properties: { chain: CHAIN_ENUM } },
+        bodyType: { type: "string", const: "json" },
+        body: {
+          type: "object",
+          description: "An unsigned transaction {chainId, from, to, value, data}, EIP-712 typed data, an EIP-7702 authorization, or a JSON-RPC request (eth_sendTransaction, eth_signTypedData_v4, personal_sign, eth_sign).",
+        },
+      },
+    },
+    output: { type: "object", required: ["type"], properties: { type: { type: "string" }, example: { type: "object" } } },
+  },
+};
+BAZAAR_CONTRACT.schema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  type: "object",
+  required: ["input"],
+  properties: {
+    input: {
+      type: "object",
+      required: ["type", "method", "queryParams"],
+      properties: {
+        type: { type: "string", const: "http" },
+        method: { type: "string", enum: ["GET"] },
+        queryParams: {
+          type: "object",
+          required: ["address"],
+          properties: { chain: CHAIN_ENUM, address: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" } },
+        },
+      },
+    },
+    output: { type: "object", required: ["type"], properties: { type: { type: "string" }, example: { type: "object" } } },
+  },
+};

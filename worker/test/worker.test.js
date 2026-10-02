@@ -218,3 +218,10 @@ test("GET /llms.txt serves the plain-text description and openapi points to it",
   const spec = await (await handle(new Request("https://joi-presign.example/openapi.json"), {}, {})).json();
   assert.equal(spec["x-agentcash-guidance"].llmsTxtUrl, "https://joi-presign.example/llms.txt");
 });
+
+test("Bazaar extensions carry an input JSON schema for both routes", async () => {
+  const { BAZAAR, BAZAAR_CONTRACT } = await import("../src/x402.js");
+  assert.equal(BAZAAR.schema.properties.input.properties.method.enum[0], "POST");
+  assert.deepEqual(BAZAAR_CONTRACT.schema.properties.input.properties.queryParams.required, ["address"]);
+  assert.ok(BAZAAR.info && BAZAAR_CONTRACT.info);
+});
