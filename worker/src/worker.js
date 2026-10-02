@@ -52,6 +52,10 @@ function config(env = {}) {
   return {
     ...DEFAULTS,
     facilitatorUrl: env.FACILITATOR_URL || DEFAULTS.facilitatorUrl,
+    cdpUrl: env.CDP_FACILITATOR_URL || DEFAULTS.cdpUrl,
+    // A function, not a value: it survives {...cfg} spreads but is skipped by JSON.stringify, so the secret can't
+    // be serialized into a response or log by accident.
+    cdpCreds: () => (env.CDP_API_KEY_ID && env.CDP_API_KEY_SECRET ? { keyId: env.CDP_API_KEY_ID, secret: env.CDP_API_KEY_SECRET } : null),
     payTo: env.PAY_TO || DEFAULTS.payTo,
     amount: env.PRICE_ATOMIC || DEFAULTS.amount,
   };
@@ -541,6 +545,7 @@ async function paidFlow(route, request, cfg, resourceUrl, deps, run, opts = {}) 
   });
 
   let payment;
+  let verified;
   try {
     payment = readPayment(request.headers);
     if (!payment) {
@@ -548,10 +553,10 @@ async function paidFlow(route, request, cfg, resourceUrl, deps, run, opts = {}) 
       return required("PAYMENT-SIGNATURE header is required");
     }
     checkPaymentMatches(cfg, payment);
-    await verifyPayment(cfg, resourceUrl, payment, deps.fetch);
+    verified = await verifyPayment(cfg, resourceUrl, payment, deps.fetch);
   } catch (e) {
     if (!(e instanceof PaymentError)) throw e;
-    logOutcome(route, `verify_failed:${clean(e.reason)}`);
+    logOutcome(route, `verify_failed:${clean(e.reason)}${e.facilitator ? ":" + e.facilitator : ""}`);
     if (e.status === 402) return required(e.reason);
     return json(e.status, { error: e.reason });
   }
@@ -581,13 +586,13 @@ async function paidFlow(route, request, cfg, resourceUrl, deps, run, opts = {}) 
     return json(500, { error: "internal error while checking; you were not charged" });
   }
 
-  const settlement = await settlePayment(cfg, resourceUrl, payment, deps.fetch);
+  const settlement = await settlePayment(cfg, resourceUrl, payment, deps.fetch, { facilitator: verified.facilitator });
   const responseHeader = payment.version === 2 ? "PAYMENT-RESPONSE" : "X-PAYMENT-RESPONSE";
   if (settlement.success !== true) {
-    logOutcome(route, `settle_failed:${clean(settlement.errorReason)}`);
+    logOutcome(route, `settle_failed:${clean(settlement.errorReason)}:${verified.facilitator}`);
     return json(402, { error: settlement.errorReason || "settlement failed" }, { [responseHeader]: b64encodeJson(settlement) });
   }
-  logOutcome(route, "paid_ok");
+  logOutcome(route, `paid_ok:${verified.facilitator}`);
   return json(200, report, { [responseHeader]: b64encodeJson(settlement) });
 }
 

@@ -2,8 +2,11 @@
 // coinbase/x402 specs/transports-v2/http.md, plus the v1 transport (JSON body / X-PAYMENT /
 // X-PAYMENT-RESPONSE) for older clients. Scheme "exact" on Base mainnet in USDC (EIP-3009).
 
+import { cdpJwt } from "./cdpauth.js";
+
 export const DEFAULTS = {
   facilitatorUrl: "https://facilitator.payai.network",
+  cdpUrl: "https://api.cdp.coinbase.com/platform/v2/x402",
   payTo: "0xa5215C2ce349Cf325CeEd739C52ff10d77499De5",
   amount: "5000", // USDC has 6 decimals: 5000 = $0.005
   asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
@@ -231,19 +234,41 @@ export function checkPaymentMatches(cfg, { version, payload }) {
   if (String(auth.value) !== cfg.amount) throw new PaymentError(402, "invalid_exact_evm_payload_authorization_value_mismatch");
 }
 
-async function facilitatorCall(cfg, path, body, fetchFn, timeoutMs) {
+/**
+ * Facilitators to try, in order: Coinbase CDP first when its credentials are configured (cfg.cdpCreds is a
+ * function so the secret never ends up in anything serialized), then PayAI as the fallback.
+ */
+export function facilitators(cfg) {
+  const payai = { name: "payai", url: cfg.facilitatorUrl || DEFAULTS.facilitatorUrl };
+  const creds = typeof cfg.cdpCreds === "function" ? cfg.cdpCreds() : null;
+  if (creds && creds.keyId && creds.secret) return [{ name: "cdp", url: cfg.cdpUrl || DEFAULTS.cdpUrl, creds }, payai];
+  return [payai];
+}
+
+/** The facilitator could not give an answer about the payment (network, 5xx, auth, rate limit, bad JSON). */
+class FacilitatorDown extends Error {}
+
+async function facilitatorCall(fac, path, body, fetchFn, timeoutMs) {
+  const url = fac.url.replace(/\/$/, "") + path;
+  const headers = { "Content-Type": "application/json", "User-Agent": "joi-presign-worker/0.1" };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let r;
   try {
-    const r = await fetchFn(cfg.facilitatorUrl.replace(/\/$/, "") + path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": "joi-presign-worker/0.1" },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-    return await r.json();
+    if (fac.creds) {
+      headers.Authorization = "Bearer " + await cdpJwt({ keyId: fac.creds.keyId, secret: fac.creds.secret, method: "POST", url });
+    }
+    r = await fetchFn(url, { method: "POST", headers, body: JSON.stringify(body), signal: ctrl.signal });
+  } catch {
+    throw new FacilitatorDown("network");
   } finally {
     clearTimeout(timer);
+  }
+  if (r.status >= 500 || r.status === 401 || r.status === 403 || r.status === 429) throw new FacilitatorDown(`http_${r.status}`);
+  try {
+    return await r.json();
+  } catch {
+    throw new FacilitatorDown("bad_json");
   }
 }
 
@@ -255,20 +280,37 @@ function facilitatorBody(cfg, resourceUrl, { version, payload }) {
   };
 }
 
+/**
+ * Verify with the first facilitator that gives an answer. A definite "invalid" answer is final; only a facilitator
+ * that couldn't answer (network, 5xx, 401/403, 429, bad JSON) falls through to the next one. Returns the
+ * facilitator's answer plus `facilitator` (its name), which settlePayment must reuse: never mix facilitators.
+ */
 export async function verifyPayment(cfg, resourceUrl, payment, fetchFn = fetch, timeoutMs = 10000) {
-  let res;
-  try {
-    res = await facilitatorCall(cfg, "/verify", facilitatorBody(cfg, resourceUrl, payment), fetchFn, timeoutMs);
-  } catch {
-    throw new PaymentError(502, "unexpected_verify_error");
+  const body = facilitatorBody(cfg, resourceUrl, payment);
+  for (const fac of facilitators(cfg)) {
+    let res;
+    try {
+      res = await facilitatorCall(fac, "/verify", body, fetchFn, timeoutMs);
+    } catch (e) {
+      if (e instanceof FacilitatorDown) continue;
+      throw e;
+    }
+    if (!res || res.isValid !== true) {
+      const err = new PaymentError(402, (res && (res.invalidReason || res.errorType)) || "unexpected_verify_error");
+      err.facilitator = fac.name;
+      throw err;
+    }
+    return { ...res, facilitator: fac.name };
   }
-  if (!res || res.isValid !== true) throw new PaymentError(402, (res && res.invalidReason) || "unexpected_verify_error");
-  return res;
+  throw new PaymentError(502, "unexpected_verify_error");
 }
 
-export async function settlePayment(cfg, resourceUrl, payment, fetchFn = fetch, timeoutMs = 20000) {
+/** Settle on the SAME facilitator that verified the payment. No fallback here: a payment is settled once or not at all. */
+export async function settlePayment(cfg, resourceUrl, payment, fetchFn = fetch, { facilitator, timeoutMs = 20000 } = {}) {
+  const list = facilitators(cfg);
+  const fac = list.find((f) => f.name === facilitator) || list[0];
   try {
-    const res = await facilitatorCall(cfg, "/settle", facilitatorBody(cfg, resourceUrl, payment), fetchFn, timeoutMs);
+    const res = await facilitatorCall(fac, "/settle", facilitatorBody(cfg, resourceUrl, payment), fetchFn, timeoutMs);
     if (res && typeof res === "object") return res;
   } catch { /* fall through */ }
   return { success: false, errorReason: "unexpected_settle_error", transaction: "", network: payment.version === 2 ? cfg.network : cfg.v1Network };

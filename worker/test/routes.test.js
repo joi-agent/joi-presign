@@ -132,7 +132,7 @@ test("paid /tx (GET and POST): verified, explained, settled, logged paid_ok", as
     assert.match(body.summary.join(" "), /sent 5 USDC/);
     assert.ok(r.headers.get("PAYMENT-RESPONSE"));
     assert.deepEqual(fac.calls.map((u) => u.split("/").pop()), ["verify", "settle"]);
-    assert.deepEqual(logs.lines.map((l) => JSON.parse(l)), [{ route: "/tx", outcome: "paid_ok" }]);
+    assert.deepEqual(logs.lines.map((l) => JSON.parse(l)), [{ route: "/tx", outcome: "paid_ok:payai" }]);
   }
 });
 
@@ -160,7 +160,7 @@ test("paid /verify-signature and /token", async () => {
   assert.equal(r2.status, 200);
   const t = await r2.json();
   assert.deepEqual([t.kind, t.token.symbol, t.token.decimals], ["token", "TST", 18]);
-  assert.deepEqual(logs.lines.map((l) => JSON.parse(l).outcome), ["paid_ok", "paid_ok"]);
+  assert.deepEqual(logs.lines.map((l) => JSON.parse(l).outcome), ["paid_ok:payai", "paid_ok:payai"]);
 });
 
 test("verify and settle failures are logged with cleaned reasons; logs never contain addresses or IPs", async () => {
@@ -178,7 +178,7 @@ test("verify and settle failures are logged with cleaned reasons; logs never con
     assert.equal(r.status, 503);
   } finally { logs.restore(); }
   const outcomes = logs.lines.map((l) => JSON.parse(l).outcome);
-  assert.deepEqual(outcomes, ["verify_failed:insufficient_funds_for_0x_", "settle_failed:invalid_transaction_state", "run_failed:unavailable"]);
+  assert.deepEqual(outcomes, ["verify_failed:insufficient_funds_for_0x_:payai", "settle_failed:invalid_transaction_state:payai", "run_failed:unavailable"]);
   for (const l of logs.lines) {
     assert.deepEqual(Object.keys(JSON.parse(l)).sort(), ["outcome", "route"]);
     assert.doesNotMatch(l, /203\.0\.113\.9|0x[0-9a-fA-F]{6,}/);
