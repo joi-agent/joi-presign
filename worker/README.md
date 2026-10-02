@@ -43,6 +43,39 @@ x402. Run by Joi, an AI agent. See DEPLOY.md.
   description that doesn't match the expected pair, a failed read or a non-positive answer is a 503 and
   never charged. Supported: ETH, BTC, USDC, USDT, DAI, LINK and stETH on Ethereum; ETH, BTC, cbBTC, cbETH,
   USDC, USDT, DAI and LINK on Base; ETH, BTC, USDC, USDT, DAI and LINK on Arbitrum.
+- `GET /x402-check?url=https://...` (or `POST /x402-check` with JSON `{url}`): "should my agent pay this
+  402?". Fetches the URL like a careful x402 client (GET, then the method the origin's OpenAPI spec declares
+  for that path, or POST after a 405) and reads the x402 v2 `PAYMENT-REQUIRED` header and the v1 JSON body.
+  For each payment option (first 5): network (CAIP-2 and v1 names), whether the asset is Circle's USDC on
+  that network or a known token (WETH, USDT, DAI on Ethereum/Base/Arbitrum), the amount in base units, token
+  units and USD (USDC = 1; known tokens via their Chainlink feed), payTo (OFAC SDN screen; wallet, EIP-7702
+  wallet or contract and Sourcify verification on Ethereum/Base/Arbitrum), maxTimeoutSeconds. Findings:
+  PAYTO_SANCTIONED (HIGH), MALFORMED_REQUIREMENTS (HIGH), NON_USDC_ASSET, NOT_EXACT_SCHEME, UNKNOWN_NETWORK,
+  PAYTO_UNVERIFIED_CONTRACT, VERSION_MISMATCH (v1 and v2 disagree on networks or amounts),
+  REDIRECT_NOT_FOLLOWED (MEDIUM), TESTNET, LONG_VALIDITY, NOT_X402 (INFO). Verdict: "do not pay" / "check the
+  findings before paying" / "no red flags found". Also reports whether /openapi.json (and whether it lists the
+  path) and /llms.txt exist. It never pays and never signs.
+- `GET /name?name=vitalik.eth` or `GET /name?address=0x...` (or `POST /name` with JSON `{name}` / `{address}`):
+  ENS on Ethereum (registry `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`, resolver `addr()`, ENSIP-10
+  wildcard through the parent's `resolve()`; off-chain CCIP-Read answers aren't followed) and Basenames
+  (`*.base.eth`) on Base (registry `0xb94704422c2a1e396835a571837aa5ae53285a95`, reverse node
+  `keccak256(namehash("80002105.reverse"), keccak256(hex address))`). A name returns `{name, address, found,
+  chain, resolver, wildcard, verified_reverse, source, notes}`; an address returns its primary names on both
+  systems, each verified by resolving the name forward again (`verified_reverse`). Only ASCII names are
+  accepted (lowercased, ENSIP-15 label rules); anything else is a 400 rather than a wrong normalization.
+- `GET /robots?url=https://...&agent=YourBot` (or `POST /robots` with JSON `{url, agent?}`): RFC 9309
+  robots.txt evaluation of the URL's path for `*`, GPTBot, ClaudeBot, Claude-User, Google-Extended, CCBot,
+  PerplexityBot and your agent: `allowed` / `disallowed` (the most specific matching rule), `no rule`
+  (nothing matches: allowed), `unknown` (robots.txt couldn't be read). 4xx robots.txt = no restrictions,
+  5xx/429 = assume complete disallow (RFC 9309 2.3.1). Also sitemaps, ai.txt and llms.txt presence (an HTML
+  page served at those paths doesn't count). robots.txt is not a terms-of-service.
+
+Outbound fetches for `/x402-check` and `/robots` (`src/fetchsafe.js`): https only, public DNS names only (no IP
+literals, no localhost/.local/.internal-style names), port 443, no credentials, `redirect: "manual"` with at
+most 2 redirects inside the same site (registrable domain; shared hosts like workers.dev or github.io count as
+separate sites), an 8 s overall limit and a size cap. A target that can't be reached is a 503 and never charged.
+Per call the subrequests stay under the Workers limit of 50: `/x402-check` 26 chain lookups + 11 fetches + 2
+facilitator calls, `/name` 30 + 2, `/robots` 9 + 2.
 
 ## Payment (x402)
 
@@ -103,11 +136,19 @@ Zero runtime dependencies.
   (`description()`, `decimals()`). The standard `<asset>-usd` feed is used where it exists; on Base only the
   SVR variant is listed for ETH and BTC.
 - `src/examples-screen-price.js`: example outputs for the two routes (`node tools/capture-examples-screen-price.mjs`).
+- `src/fetchsafe.js`: the outbound fetch guard (URL checks, same-site redirects, time limit, size cap, budget).
+- `src/x402check.js`: `/x402-check`. USDC addresses from Circle's list
+  (developers.circle.com/stablecoins/usdc-contract-addresses, checked 2026-10-02); known tokens checked on-chain.
+- `src/ens.js`: `/name`. Addresses from docs.ens.domains (registry) and the base/basenames README (Base
+  Mainnet table), checked on-chain on 2026-10-02.
+- `src/robots.js`: `/robots`, RFC 9309 parsing and matching (rules capped at 5,000 to stay inside the CPU limit).
+- `src/routes-meta3.js` + `src/examples-more.js`: descriptions, Bazaar info/schemas and live-captured
+  examples for the three routes (`node tools/capture-examples-more.mjs`).
 - `src/json.js`: lossless JSON parse (integers over 15 digits become strings, so amounts aren't rounded).
 
 ## Tests
 
-`node --test test/*.test.js` (193 tests)
+`node --test test/*.test.js` (221 tests)
 
 - `test/fixtures.json`: 56 cases generated by running the Python tool (`tools/gen_fixtures.py`). The
   Worker must produce the same kind, risk, findings and decoded values.
@@ -116,6 +157,9 @@ Zero runtime dependencies.
   personal_sign UTF-8/hex, EIP-712 incl. the spec's "Ether Mail" vector and a nested/array case).
 - `test/fixtures/sdn-sample.xml`: a made-up list in the official SDN.XML format, for the generator test
   (needs `python3` on PATH).
+- `test/more.test.js`: the fetch guard (SSRF cases, redirects, size cap, budget), x402-check findings and
+  verdicts, ENS namehash vectors (EIP-137) and a Basenames reverse node computed on-chain, wildcard and
+  reverse verification, RFC 9309's own examples (5.1, 5.2, 2.2.2, 2.2.3), and the HTTP flow of the three routes.
 
 ## Limitations (same as the Python tool, plus Worker ones)
 
@@ -123,6 +167,9 @@ Zero runtime dependencies.
 - Public RPCs can rate-limit; those checks then degrade to INFO.
 - Rate limiting is per isolate (best effort), not global.
 - The facilitator is trusted to verify and settle honestly; settlement happens after the analysis.
+- `/name` handles ASCII names only and doesn't follow off-chain (CCIP-Read) resolution.
+- `/x402-check` reads what the server says; it can't know whether the service will deliver after payment.
+- `/robots` reads robots.txt only; a site's terms of service may still forbid automated access.
 
 ## EIP-7702 (account delegation)
 

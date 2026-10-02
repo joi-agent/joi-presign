@@ -14,6 +14,13 @@ import {
 } from "./routes-meta.js";
 import { parseScreenTarget, screenAddress } from "./screen.js";
 import { parsePriceTarget, readPrice, supportedPairs } from "./price.js";
+import { SafeFetcher } from "./fetchsafe.js";
+import { parseX402CheckTarget, x402Check } from "./x402check.js";
+import { parseNameTarget, resolveName } from "./ens.js";
+import { AGENTS, parseRobotsTarget, checkRobots } from "./robots.js";
+import {
+  BAZAAR_NAME, BAZAAR_ROBOTS, BAZAAR_X402CHECK, NAME_DESCRIPTION, ROBOTS_DESCRIPTION, X402CHECK_DESCRIPTION,
+} from "./routes-meta3.js";
 import { parseJsonLossless } from "./json.js";
 import {
   BAZAAR, BAZAAR_CONTRACT, CONTRACT_DESCRIPTION, DEFAULTS, DESCRIPTION, PaymentError, b64encodeJson, checkPaymentMatches, paymentRequired,
@@ -85,6 +92,9 @@ ${VERIFY_DESCRIPTION}
 ${TOKEN_DESCRIPTION}
 ${SCREEN_DESCRIPTION}
 ${PRICE_DESCRIPTION}
+${X402CHECK_DESCRIPTION}
+${NAME_DESCRIPTION}
+${ROBOTS_DESCRIPTION}
 
 POST /check?chain=base|ethereum|arbitrum  (JSON body)
   Body: an unsigned transaction {chainId, from, to, value, data} (type-4 with authorizationList included),
@@ -112,6 +122,17 @@ GET /screen?address=0x...[&chain=base|ethereum|arbitrum]  (or POST /screen with 
 GET /price?asset=ETH&chain=base|ethereum|arbitrum  (or POST /price with JSON {asset, chain?})
   Returns {asset, chain, price (USD, decimal string), decimals, updated_at, age_seconds, stale, feed, description,
   round_id} from the Chainlink data feed. Supported: ${supportedPairs().join(", ")}.
+GET /x402-check?url=https://...  (or POST /x402-check with JSON {url})
+  Fetches the URL (GET, then the method its OpenAPI spec declares) and reads the 402: x402 v2 PAYMENT-REQUIRED
+  header and v1 JSON body. Returns {x402, versions, verdict, risk, findings[], options[{scheme, network, asset{kind:
+  usdc|known|unknown}, amount{atomic, human, usd}, pay_to{kind, verified, sanctioned}, max_timeout_seconds}], discovery}.
+  It never pays and never signs. https only, public host names only, 2 same-site redirects at most.
+GET /name?name=vitalik.eth  or  GET /name?address=0x...  (or POST /name with JSON {name} or {address})
+  ENS on Ethereum, Basenames (*.base.eth) on Base. Returns {name, address, chain, verified_reverse, source, ...};
+  for an address, the primary names on both, each checked by resolving the name back. ASCII names only.
+GET /robots?url=https://...[&agent=YourBot]  (or POST /robots with JSON {url, agent?})
+  Returns {robots_found, results{agent: allowed|disallowed|no rule|unknown}, details, sitemaps, ai_txt, llms_txt}
+  for ${AGENTS.join(", ")} and your agent. robots.txt is not a terms-of-service.
 Price: ${price} USDC per call (any endpoint) on Base, paid with x402 (v2 PAYMENT-SIGNATURE or v1
   X-PAYMENT header). Without payment you get HTTP 402 with the payment requirements. Bad input is
   rejected for free, and failed lookups are never charged.
@@ -127,6 +148,28 @@ Request bodies are not stored.
 `;
 }
 
+function getPostPaths(path, { summary, description, pay, params, bodySchema, example, input, errors }) {
+  const responses = (withExample) => ({
+    "200": withExample ? { description: "Result", content: { "application/json": { example } } } : { description: "Result" },
+    "400": { description: errors["400"] },
+    "402": { description: "Payment Required (x402)" },
+    "503": { description: errors["503"] },
+  });
+  return {
+    [path]: {
+      get: { summary, description, security: [], "x-payment-info": pay, parameters: params, responses: responses(true) },
+      post: {
+        summary: `${summary} (JSON body)`,
+        description: `Same as GET ${path} with the parameters in a JSON body.`,
+        security: [],
+        "x-payment-info": pay,
+        requestBody: { required: true, content: { "application/json": { schema: bodySchema, example: input } } },
+        responses: responses(false),
+      },
+    },
+  };
+}
+
 export function openapi(cfg, origin) {
   const price = (Number(cfg.amount) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
   const pay = { price: { mode: "fixed", currency: "USD", amount: price }, protocols: [{ x402: {} }] };
@@ -135,12 +178,48 @@ export function openapi(cfg, origin) {
     info: {
       title: "joi-presign",
       version: "0.1.0",
-      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} ${SCREEN_DESCRIPTION} ${PRICE_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
+      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} ${SCREEN_DESCRIPTION} ${PRICE_DESCRIPTION} ${X402CHECK_DESCRIPTION} ${NAME_DESCRIPTION} ${ROBOTS_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
       contact: { name: "Joi (AI agent)", email: "joi-ai@agentmail.to" },
     },
     servers: [{ url: origin }],
     "x-agentcash-guidance": { llmsTxtUrl: `${origin}/llms.txt` },
     paths: {
+      ...getPostPaths("/x402-check", {
+        summary: "Check an x402 payment request before paying it",
+        description: X402CHECK_DESCRIPTION,
+        pay,
+        params: [{ name: "url", in: "query", required: true, schema: { type: "string", format: "uri", pattern: "^https://" } }],
+        bodySchema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri", pattern: "^https://" } } },
+        example: BAZAAR_X402CHECK.info.output.example,
+        input: BAZAAR_X402CHECK.info.input.queryParams,
+        errors: { "400": "Not an https URL with a public host name (never charged)", "503": "The URL couldn't be reached (never charged)" },
+      }),
+      ...getPostPaths("/name", {
+        summary: "Resolve an ENS name or Basename, or find an address's primary name",
+        description: NAME_DESCRIPTION,
+        pay,
+        params: [
+          { name: "name", in: "query", required: false, schema: { type: "string" }, description: "e.g. vitalik.eth or jesse.base.eth" },
+          { name: "address", in: "query", required: false, schema: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" } },
+        ],
+        bodySchema: { type: "object", properties: { name: { type: "string" }, address: { type: "string", pattern: "^0x[0-9a-fA-F]{40}$" } }, description: "Exactly one of name or address." },
+        example: BAZAAR_NAME.info.output.example,
+        input: BAZAAR_NAME.info.input.queryParams,
+        errors: { "400": "Neither or both of name/address, an invalid address, or a name with non-ASCII characters (never charged)", "503": "Chain lookup unavailable (never charged)" },
+      }),
+      ...getPostPaths("/robots", {
+        summary: "May this crawler or AI agent fetch this URL, per robots.txt (RFC 9309)?",
+        description: ROBOTS_DESCRIPTION,
+        pay,
+        params: [
+          { name: "url", in: "query", required: true, schema: { type: "string", format: "uri", pattern: "^https://" } },
+          { name: "agent", in: "query", required: false, schema: { type: "string", pattern: "^[A-Za-z0-9_-]{1,64}$" }, description: "Your crawler's product token, checked in addition to the built-in list" },
+        ],
+        bodySchema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri", pattern: "^https://" }, agent: { type: "string", pattern: "^[A-Za-z0-9_-]{1,64}$" } } },
+        example: BAZAAR_ROBOTS.info.output.example,
+        input: BAZAAR_ROBOTS.info.input.queryParams,
+        errors: { "400": "Not an https URL with a public host name, or a bad agent token (never charged)", "503": "The site couldn't be reached (never charged)" },
+      }),
       "/screen": {
         get: {
           summary: "Screen an EVM address against the OFAC SDN list",
@@ -405,7 +484,7 @@ async function handleCheck(request, env, deps) {
 }
 
 // Payment is verified before running and settled only after a successful run, so failures are never charged.
-async function paidFlow(route, request, cfg, resourceUrl, deps, run) {
+async function paidFlow(route, request, cfg, resourceUrl, deps, run, opts = {}) {
   const required = (error) => json(402, paymentRequiredV1Body(cfg, resourceUrl, error), {
     "PAYMENT-REQUIRED": b64encodeJson(paymentRequired(cfg, resourceUrl, error)),
   });
@@ -428,7 +507,7 @@ async function paidFlow(route, request, cfg, resourceUrl, deps, run) {
 
   let report;
   try {
-    report = await run(deps.lookups ? deps.lookups() : new NetLookups({ fetchFn: deps.fetch }));
+    report = await run(deps.lookups ? deps.lookups() : new NetLookups({ fetchFn: deps.fetch, ...(opts.maxRequests ? { maxRequests: opts.maxRequests } : {}) }));
   } catch (e) {
     // Not settled, so the payer is not charged.
     if (e instanceof BadInput) {
@@ -554,6 +633,46 @@ async function handlePrice(request, env, deps) {
   return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => readPrice(target, lookups));
 }
 
+// Outbound budgets keep every call under the Workers limit of 50 subrequests: chain lookups + outbound fetches + 2
+// facilitator calls. A fetcher that runs out stops with a 503 (never charged); chain lookups degrade to "unknown".
+async function handleX402Check(request, env, deps) {
+  const route = "/x402-check";
+  const cfg = { ...config(env), description: X402CHECK_DESCRIPTION, bazaar: BAZAAR_X402CHECK };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["url"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parseX402CheckTarget(r.params.url);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps,
+    (lookups) => x402Check(target, lookups, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 11 })), { maxRequests: 26 });
+}
+
+async function handleName(request, env, deps) {
+  const route = "/name";
+  const cfg = { ...config(env), description: NAME_DESCRIPTION, bazaar: BAZAAR_NAME };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["name", "address"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parseNameTarget(r.params.name, r.params.address);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps, (lookups) => resolveName(target, lookups), { maxRequests: 30 });
+}
+
+async function handleRobots(request, env, deps) {
+  const route = "/robots";
+  const cfg = { ...config(env), description: ROBOTS_DESCRIPTION, bazaar: BAZAAR_ROBOTS };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["url", "agent"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parseRobotsTarget(r.params.url, r.params.agent);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps,
+    () => checkRobots(target, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 9, maxBytes: 512 * 1024 })), { maxRequests: 1 });
+}
+
 // Paid routes and their payment details. An unpaid request to any of them (any method, any input) gets a 402
 // with the requirements, which is what x402 clients and discovery probers expect. Input is validated only once a
 // payment is attached, still before anything is settled, so bad input is never charged.
@@ -565,6 +684,9 @@ const PAID_ROUTES = {
   "/verify-signature": { description: VERIFY_DESCRIPTION, bazaar: BAZAAR_VERIFY },
   "/screen": { description: SCREEN_DESCRIPTION, bazaar: BAZAAR_SCREEN },
   "/price": { description: PRICE_DESCRIPTION, bazaar: BAZAAR_PRICE },
+  "/x402-check": { description: X402CHECK_DESCRIPTION, bazaar: BAZAAR_X402CHECK },
+  "/name": { description: NAME_DESCRIPTION, bazaar: BAZAAR_NAME },
+  "/robots": { description: ROBOTS_DESCRIPTION, bazaar: BAZAAR_ROBOTS },
 };
 
 function unpaid402(request, env, url) {
@@ -605,6 +727,9 @@ export async function handle(request, env = {}, deps = {}) {
   if (request.method === "POST" && url.pathname === "/verify-signature") return handleVerify(request, env, deps);
   if (getOrPost && url.pathname === "/screen") return handleScreen(request, env, deps);
   if (getOrPost && url.pathname === "/price") return handlePrice(request, env, deps);
+  if (getOrPost && url.pathname === "/x402-check") return handleX402Check(request, env, deps);
+  if (getOrPost && url.pathname === "/name") return handleName(request, env, deps);
+  if (getOrPost && url.pathname === "/robots") return handleRobots(request, env, deps);
   return json(404, { error: "not found. See GET /" });
 }
 
