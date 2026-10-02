@@ -1,0 +1,7 @@
+{
+ "method": "eth_sign",
+ "params": [
+  "0x000000000000000000000000000000000000dEaD",
+  "0xabababababababababababababababababababababababababababababababab"
+ ]
+}

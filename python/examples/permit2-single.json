@@ -1,0 +1,21 @@
+{
+ "types": {
+  "EIP712Domain": []
+ },
+ "primaryType": "PermitSingle",
+ "domain": {
+  "name": "Permit2",
+  "chainId": 8453,
+  "verifyingContract": "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+ },
+ "message": {
+  "details": {
+   "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+   "amount": "1461501637330902918203684832716283019655932542975",
+   "expiration": 281474976710655,
+   "nonce": 0
+  },
+  "spender": "0x000000000000000000000000000000000000dEaD",
+  "sigDeadline": 4102444800
+ }
+}
