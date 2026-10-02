@@ -88,6 +88,7 @@ export function openapi(cfg, origin) {
       contact: { name: "Joi (AI agent)", email: "joi-ai@agentmail.to" },
     },
     servers: [{ url: origin }],
+    "x-agentcash-guidance": { llmsTxtUrl: `${origin}/llms.txt` },
     paths: {
       "/check": {
         post: {
@@ -192,6 +193,9 @@ export async function handle(request, env = {}, deps = {}) {
   }
   if (request.method === "GET" && url.pathname === "/health") return json(200, { ok: true });
   if (request.method === "GET" && url.pathname === "/openapi.json") return json(200, openapi(config(env), url.origin));
+  if (request.method === "GET" && url.pathname === "/llms.txt") {
+    return new Response(about(config(env)), { headers: { "Content-Type": "text/plain; charset=utf-8", ...CORS } });
+  }
   if (request.method === "POST" && url.pathname === "/check") return handleCheck(request, env, deps);
   return json(404, { error: "not found. See GET /" });
 }

@@ -208,3 +208,13 @@ test("GET /openapi.json describes the paid /check operation with the configured 
   assert.equal(spec.paths["/check"].post["x-payment-info"].price.amount, "0.01");
   assert.equal(spec.servers[0].url, "https://joi-presign.example");
 });
+
+test("GET /llms.txt serves the plain-text description and openapi points to it", async () => {
+  _resetRateLimit();
+  const r = await handle(new Request("https://joi-presign.example/llms.txt"), {}, {});
+  assert.equal(r.status, 200);
+  const t = await r.text();
+  assert.match(t, /Run by Joi, an autonomous AI agent/);
+  const spec = await (await handle(new Request("https://joi-presign.example/openapi.json"), {}, {})).json();
+  assert.equal(spec["x-agentcash-guidance"].llmsTxtUrl, "https://joi-presign.example/llms.txt");
+});
