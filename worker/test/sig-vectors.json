@@ -1,0 +1,204 @@
+{
+ "raw": [
+  {
+   "address": "0x4AddcEdAFbf62357b8393326aA0fb2862B9d690F",
+   "hash": "0x83e437bac3ea937b2535b5a24fe8f6efc49e46e2c3923cb8999ca6b229956612",
+   "signature": "0xc1b0995ff4dbcd7a81c4744fa35b7fca0610edaf6f5af4b5537e26c3afdae5032addbc899c045f14f69ce6c73c35521f8e9a48d22818735fce65dffdf2b819c61c"
+  },
+  {
+   "address": "0x4F24f0F71E749Cf2B22BB2bFb35EC9F42002FC9D",
+   "hash": "0x58377c0fcfe927f7fdfff8bb42bca9eda671f0a7324295c0273eb0be68816f99",
+   "signature": "0x417a31728492be883851c28349d6599f6dd4021f691638dbb2ef55685113accf3b6924c650de4f5830b1b2f66d04b9b80eedb7680f086ff92461b581dbf9df9b1c"
+  },
+  {
+   "address": "0x94eB420B136Bd64704595740f7451A1b78479Ce1",
+   "hash": "0x6e8c65eac75f145a1d60f11850587b1a2c6ebd3f5a5c8094bd54d40540e9ac4b",
+   "signature": "0x3dc38702427378294d4377d3fa342c23aa3daa905c8e3876b5fbb491b718568771a5b91814c1f6b8b29b35f33e1baf066d3173952d7537f8808a75fc5eaf04fb1c"
+  }
+ ],
+ "personal": [
+  {
+   "address": "0x4AddcEdAFbf62357b8393326aA0fb2862B9d690F",
+   "message": "Sign in to joi-presign\nNonce: 42",
+   "signature": "0x61dc48ff9e294c95a5e56bc6e1ec82bae1b3ac6766aebfdaeea37e2ec1f5b6913471dbc42af9dff142b9839af9ef43145121ff5f1f45f6d87d33d84c6bff8e511c"
+  },
+  {
+   "address": "0x4AddcEdAFbf62357b8393326aA0fb2862B9d690F",
+   "message": "héllo ✓",
+   "signature": "0xaed78f1f3b246b007dc6df7268b6ca5a22a4a951707cd076c027faf1ae4eba2b66f619c4e3c0acac9bed49c58c7267506fea49155127ced180208501aaaec0181c"
+  },
+  {
+   "address": "0x4F24f0F71E749Cf2B22BB2bFb35EC9F42002FC9D",
+   "message": "0xdeadbeef00ff",
+   "signature": "0x66a91ba0ae2a17f5de71dc07e05493efcec5ac76407d8d8245fadedbbc63f0556468ca2834872b9bb4d1f9f1e330443fa8da1a6a57c16ec3bd29dedbd2e2286f1b"
+  }
+ ],
+ "typed": [
+  {
+   "address": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826",
+   "typedData": {
+    "types": {
+     "EIP712Domain": [
+      {
+       "name": "name",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "string"
+      },
+      {
+       "name": "chainId",
+       "type": "uint256"
+      },
+      {
+       "name": "verifyingContract",
+       "type": "address"
+      }
+     ],
+     "Person": [
+      {
+       "name": "name",
+       "type": "string"
+      },
+      {
+       "name": "wallet",
+       "type": "address"
+      }
+     ],
+     "Mail": [
+      {
+       "name": "from",
+       "type": "Person"
+      },
+      {
+       "name": "to",
+       "type": "Person"
+      },
+      {
+       "name": "contents",
+       "type": "string"
+      }
+     ]
+    },
+    "primaryType": "Mail",
+    "domain": {
+     "name": "Ether Mail",
+     "version": "1",
+     "chainId": 1,
+     "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+    },
+    "message": {
+     "from": {
+      "name": "Cow",
+      "wallet": "0xCD2a3d9F938E13CD947Ec05AbC7FE734Df8DD826"
+     },
+     "to": {
+      "name": "Bob",
+      "wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"
+     },
+     "contents": "Hello, Bob!"
+    }
+   },
+   "digest": "0xbe609aee343fb3c4b28e1df9e632fca64fcfaede20f02e86244efddf30957bd2",
+   "signature": "0x4355c47d63924e8a72e509b65029052eb6c299d53a04e167c5775fd466751c9d07299936d304c153f6443dfa05f40ff007d72911b6f72307f996231605b915621c"
+  },
+  {
+   "address": "0x94eB420B136Bd64704595740f7451A1b78479Ce1",
+   "typedData": {
+    "types": {
+     "EIP712Domain": [
+      {
+       "name": "name",
+       "type": "string"
+      },
+      {
+       "name": "chainId",
+       "type": "uint256"
+      }
+     ],
+     "Item": [
+      {
+       "name": "id",
+       "type": "uint256"
+      },
+      {
+       "name": "tags",
+       "type": "string[]"
+      },
+      {
+       "name": "blob",
+       "type": "bytes"
+      },
+      {
+       "name": "flag",
+       "type": "bool"
+      },
+      {
+       "name": "delta",
+       "type": "int256"
+      },
+      {
+       "name": "tag",
+       "type": "bytes32"
+      }
+     ],
+     "Order": [
+      {
+       "name": "maker",
+       "type": "address"
+      },
+      {
+       "name": "items",
+       "type": "Item[]"
+      },
+      {
+       "name": "fixed",
+       "type": "uint8[2]"
+      },
+      {
+       "name": "memo",
+       "type": "string"
+      }
+     ]
+    },
+    "primaryType": "Order",
+    "domain": {
+     "name": "Test",
+     "chainId": 8453
+    },
+    "message": {
+     "maker": "0x94eB420B136Bd64704595740f7451A1b78479Ce1",
+     "items": [
+      {
+       "id": 1,
+       "tags": [
+        "a",
+        "bc"
+       ],
+       "blob": "0x0102",
+       "flag": true,
+       "delta": -5,
+       "tag": "0xabababababababababababababababababababababababababababababababab"
+      },
+      {
+       "id": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+       "tags": [],
+       "blob": "0x",
+       "flag": false,
+       "delta": 7,
+       "tag": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      }
+     ],
+     "fixed": [
+      3,
+      4
+     ],
+     "memo": "nested ✓"
+    }
+   },
+   "digest": "0x24109c4c84e89741e3ea301609fd43a7f6010f9e0a193fb9a0034355949712e1",
+   "signature": "0xb6d853882c93faea01199738c4f83a00ff6d69733616eeee416952e60e858cd81c84c25a74bfbfd87cc663cf3416739a4e06a875f727ffaa74c9aef404b8c2cf1c"
+  }
+ ]
+}
