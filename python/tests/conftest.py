@@ -17,13 +17,16 @@ FRESH = "0x" + "55" * 20         # wallet with no history
 DELEGATED = "0x" + "66" * 20     # EIP-7702 EOA
 SIGNER = "0x" + "77" * 20
 UNKNOWN_ADDR = "0x" + "88" * 20  # lookups fail
+MM_DELEGATOR = "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b"  # allowlisted 7702 delegate, verified
+SIMPLE7702 = "0x4cd241e8d1510e30b2076397afc7508ae59c66c9"    # allowlisted 7702 delegate, unverified here
 
 
 class FakeLookups:
     def __init__(self, signatures=None):
         self.code = {ROUTER: "contract", SHADY: "contract", TOKEN: "contract", EOA: "none", FRESH: "none",
-                     DELEGATED: "7702", SIGNER: "none"}
-        self.verified = {ROUTER: True, SHADY: False, TOKEN: True}
+                     DELEGATED: "7702", SIGNER: "none",
+                     MM_DELEGATOR: "contract", SIMPLE7702: "contract"}
+        self.verified = {ROUTER: True, SHADY: False, TOKEN: True, MM_DELEGATOR: True, SIMPLE7702: False}
         self.counts = {EOA: 12, FRESH: 0, SIGNER: 5}
         self.signatures = signatures if signatures is not None else {}
 

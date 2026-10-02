@@ -1910,6 +1910,867 @@
    }
   },
   {
+   "name": "7702_known_verified",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+      "chainId": 1,
+      "nonce": 5,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "MEDIUM",
+      "message": "Delegates your account to MetaMask EIP7702StatelessDeleGator (0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B), a widely used wallet implementation. This gives that contract full control of your account on chain 1. Only sign this inside your wallet's own upgrade flow."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B",
+       "chainId": "1",
+       "nonce": "5",
+       "known_as": "MetaMask EIP7702StatelessDeleGator"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_unverified",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x3333333333333333333333333333333333333333. This gives the contract full control of your account on chain 1: it can move all your assets at any time. Its source is not verified on Sourcify. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_verified_not_listed",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x2222222222222222222222222222222222222222",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x2222222222222222222222222222222222222222. This gives the contract full control of your account on chain 1: it can move all your assets at any time. It is not one of the widely used wallet implementations. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x2222222222222222222222222222222222222222",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_listed_unverified",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x4cd241e8d1510e30b2076397afc7508ae59c66c9",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9 (Simple7702Account (Ethereum Foundation AA team), but unconfirmed). This gives the contract full control of your account on chain 1: it can move all your assets at any time. Its source is not verified on Sourcify. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": "Simple7702Account (Ethereum Foundation AA team)"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_chain_zero",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+      "chainId": 0,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "AUTH_ALL_CHAINS",
+      "severity": "HIGH",
+      "message": "This authorization has chainId 0, so it is valid on every EVM chain: whoever holds it can install the same delegation everywhere your account exists."
+     },
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "MEDIUM",
+      "message": "Delegates your account to MetaMask EIP7702StatelessDeleGator (0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B), a widely used wallet implementation. This gives that contract full control of your account on every chain. Only sign this inside your wallet's own upgrade flow."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B",
+       "chainId": "0",
+       "nonce": "0",
+       "known_as": "MetaMask EIP7702StatelessDeleGator"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_revoke",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x0000000000000000000000000000000000000000",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "LOW",
+    "findings": [
+     {
+      "code": "DELEGATION_REVOKE",
+      "severity": "INFO",
+      "message": "Delegates to the zero address: this clears your account's EIP-7702 delegation (a revoke)."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x0000000000000000000000000000000000000000",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_nocode_and_delegated",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x4444444444444444444444444444444444444444",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     },
+     {
+      "address": "0x6666666666666666666666666666666666666666",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x4444444444444444444444444444444444444444. This gives the contract full control of your account on chain 1: it can move all your assets at any time. It has no code on that chain, so the delegation points at nothing, or at whatever gets deployed there later. Wallet drainers use exactly this."
+     },
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x6666666666666666666666666666666666666666. This gives the contract full control of your account on chain 1: it can move all your assets at any time. It is not a contract. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x4444444444444444444444444444444444444444",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      },
+      {
+       "delegate": "0x6666666666666666666666666666666666666666",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_other_chain",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+      "chainId": 8453,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "CHAIN_MISMATCH",
+      "severity": "HIGH",
+      "message": "The authorization is for chain 8453, not chain 1."
+     },
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "MEDIUM",
+      "message": "Delegates your account to MetaMask EIP7702StatelessDeleGator (0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B), a widely used wallet implementation. This gives that contract full control of your account on chain 8453. Only sign this inside your wallet's own upgrade flow."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B",
+       "chainId": "8453",
+       "nonce": "0",
+       "known_as": "MetaMask EIP7702StatelessDeleGator"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_lookups_fail",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x8888888888888888888888888888888888888888",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "LOOKUP_UNAVAILABLE",
+      "severity": "INFO",
+      "message": "Could not check whether the delegate 0x8888888888888888888888888888888888888888 is a contract."
+     },
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x8888888888888888888888888888888888888888. This gives the contract full control of your account on chain 1: it can move all your assets at any time. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x8888888888888888888888888888888888888888",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_standalone_object",
+   "chain": 1,
+   "payload": {
+    "address": "0x3333333333333333333333333333333333333333",
+    "chainId": "0x1",
+    "nonce": "0x0"
+   },
+   "expected": {
+    "kind": "authorization",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x3333333333333333333333333333333333333333. This gives the contract full control of your account on chain 1: it can move all your assets at any time. Its source is not verified on Sourcify. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "delegate": "0x3333333333333333333333333333333333333333",
+     "chainId": "1",
+     "nonce": "0",
+     "known_as": null
+    }
+   }
+  },
+  {
+   "name": "7702_request",
+   "chain": 1,
+   "payload": {
+    "method": "wallet_signAuthorization",
+    "params": [
+     {
+      "contractAddress": "0x63c0c19a282a1b52b07dd5a65b58948a07dae32b",
+      "chainId": 1,
+      "nonce": 3,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "authorization",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "NONSTANDARD_AUTH_REQUEST",
+      "severity": "MEDIUM",
+      "message": "There is no standard way for a website to ask for an EIP-7702 authorization signature. Legitimate wallets only create one inside their own account-upgrade flow."
+     },
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "MEDIUM",
+      "message": "Delegates your account to MetaMask EIP7702StatelessDeleGator (0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B), a widely used wallet implementation. This gives that contract full control of your account on chain 1. Only sign this inside your wallet's own upgrade flow."
+     }
+    ],
+    "decoded": {
+     "delegate": "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B",
+     "chainId": "1",
+     "nonce": "3",
+     "known_as": "MetaMask EIP7702StatelessDeleGator"
+    }
+   }
+  },
+  {
+   "name": "7702_in_jsonrpc_tx",
+   "chain": 1,
+   "payload": {
+    "method": "eth_sendTransaction",
+    "params": [
+     {
+      "type": "0x4",
+      "chainId": 1,
+      "from": "0x7777777777777777777777777777777777777777",
+      "to": "0x7777777777777777777777777777777777777777",
+      "value": "0x0",
+      "data": "0x",
+      "authorizationList": [
+       {
+        "address": "0x3333333333333333333333333333333333333333",
+        "chainId": 1,
+        "nonce": 0,
+        "yParity": "0x0",
+        "r": "0x01",
+        "s": "0x02"
+       }
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "HIGH",
+    "findings": [
+     {
+      "code": "EIP7702_DELEGATION",
+      "severity": "HIGH",
+      "message": "Delegates your account to 0x3333333333333333333333333333333333333333. This gives the contract full control of your account on chain 1: it can move all your assets at any time. Its source is not verified on Sourcify. Wallet drainers use exactly this."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_missing_fields",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "An EIP-7702 authorization entry is missing chainId, address or nonce."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      null
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_negative_nonce",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333",
+      "chainId": 1,
+      "nonce": -1,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "An EIP-7702 authorization has a chainId or nonce that is not a valid number."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": null,
+       "nonce": null,
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_null_chain",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333",
+      "chainId": null,
+      "nonce": 0
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "An EIP-7702 authorization has a chainId or nonce that is not a valid number."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": null,
+       "nonce": null,
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_bool_chain",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333",
+      "chainId": true,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "An EIP-7702 authorization has a chainId or nonce that is not a valid number."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": null,
+       "nonce": null,
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_list_not_list",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": "nope"
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "The transaction's authorizationList is not a list."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0"
+    }
+   }
+  },
+  {
+   "name": "7702_bad_delegate",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x1234",
+      "chainId": 1,
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_ADDRESS",
+      "severity": "MEDIUM",
+      "message": "Invalid delegate address in an EIP-7702 authorization: '0x1234'."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": null,
+       "chainId": "1",
+       "nonce": "0",
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_hex_negative_chain",
+   "chain": 1,
+   "payload": {
+    "type": "0x4",
+    "chainId": 1,
+    "from": "0x7777777777777777777777777777777777777777",
+    "to": "0x7777777777777777777777777777777777777777",
+    "value": "0x0",
+    "data": "0x",
+    "authorizationList": [
+     {
+      "address": "0x3333333333333333333333333333333333333333",
+      "chainId": "-0x1",
+      "nonce": 0,
+      "yParity": "0x0",
+      "r": "0x01",
+      "s": "0x02"
+     }
+    ]
+   },
+   "expected": {
+    "kind": "tx",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "MALFORMED_AUTHORIZATION",
+      "severity": "MEDIUM",
+      "message": "An EIP-7702 authorization has a chainId or nonce that is not a valid number."
+     }
+    ],
+    "decoded": {
+     "to": "0x7777777777777777777777777777777777777777",
+     "value": "0",
+     "authorizations": [
+      {
+       "delegate": "0x3333333333333333333333333333333333333333",
+       "chainId": null,
+       "nonce": null,
+       "known_as": null
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "7702_request_without_auth",
+   "chain": 1,
+   "payload": {
+    "method": "wallet_signAuthorization",
+    "params": [
+     "0x1234"
+    ]
+   },
+   "expected": {
+    "kind": "unknown",
+    "risk": "MEDIUM",
+    "findings": [
+     {
+      "code": "UNRECOGNIZED_INPUT",
+      "severity": "MEDIUM",
+      "message": "Not a transaction, typed data or sign request this tool understands."
+     }
+    ],
+    "decoded": null
+   }
+  },
+  {
    "name": "example_approve-usdc-to-a-wallet",
    "chain": 8453,
    "payload": {

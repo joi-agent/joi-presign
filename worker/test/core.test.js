@@ -62,3 +62,8 @@ test("lossless JSON keeps big integers exact and leaves strings alone", () => {
   assert.equal(v.e, 1.5e30);
   assert.equal(v.f, 'x"123456789012345678'); // the escaped quote must not end the string
 });
+
+test("EIP-7702 delegate allowlist uses checksummed addresses", async () => {
+  const { KNOWN_DELEGATES } = await import("../src/core.js");
+  for (const a of Object.keys(KNOWN_DELEGATES)) assert.equal(toChecksumAddress(a.toLowerCase()), a);
+});

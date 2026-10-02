@@ -20,6 +20,19 @@ PERMIT2_TYPES = {
     "PermitSingle", "PermitBatch", "PermitTransferFrom", "PermitBatchTransferFrom",
     "PermitWitnessTransferFrom", "PermitBatchWitnessTransferFrom",
 }
+ZERO_ADDRESS = "0x" + "00" * 20
+# Widely used EIP-7702 delegate implementations. Sources: the "known implementations" table on
+# ethereum.org/roadmap/pectra/7702 (checked 2026-10-02), except Coinbase's proxy, from the
+# base/eip-7702-proxy README. Being listed is not enough: the delegate must also be verified on Sourcify.
+KNOWN_DELEGATES = {
+    "0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00": "Uniswap Calibur",
+    "0x69007702764179f14F51cdce752f4f775d74E139": "Alchemy Modular Account",
+    "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d": "Ambire account",
+    "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B": "MetaMask EIP7702StatelessDeleGator",
+    "0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9": "Simple7702Account (Ethereum Foundation AA team)",
+    "0x17c11FDdADac2b341F2455aFe988fec4c3ba26e3": "Luganodes Pectra batch contract",
+    "0x7702cb554e6bFb442cb743A7dF23154544a7176C": "Coinbase EIP7702Proxy",
+}
 
 
 class Report:
@@ -78,11 +91,23 @@ def classify(payload):
         candidates = params + ([payload["message"]] if "message" in payload else [])
         msgs = [p for p in candidates if isinstance(p, str) and not (is_address(p) and len(p) == 42)]
         return "message", (method, msgs[0] if msgs else "")
+    if method and method.startswith(("eth_", "wallet_")) and "authorization" in method.lower():
+        for p in params + [payload.get("authorization")]:
+            if _is_authorization(p):
+                return "authorization", ("request", p)
+        return "unknown", payload
     if "types" in payload and "primaryType" in payload:
         return "typed", payload
+    if _is_authorization(payload) and not any(k in payload for k in ("to", "data", "input")):
+        return "authorization", ("object", payload)
     if "to" in payload or "data" in payload or "input" in payload:
         return "tx", payload
     return "unknown", payload
+
+
+def _is_authorization(p):
+    """An EIP-7702 authorization: {chainId, address (viem: contractAddress), nonce, ...signature}."""
+    return isinstance(p, dict) and ("address" in p or "contractAddress" in p) and "chainId" in p and "nonce" in p
 
 
 def analyze(payload, chain_id, lookups):
@@ -90,6 +115,19 @@ def analyze(payload, chain_id, lookups):
     kind, obj = classify(payload)
     if kind == "tx":
         decoded = _analyze_tx(obj, chain_id, lookups, rep, depth=0)
+        if isinstance(obj, dict) and "authorizationList" in obj:
+            auths = obj["authorizationList"]
+            if isinstance(auths, list):
+                decoded["authorizations"] = [_authorization(a, chain_id, lookups, rep) for a in auths]
+            else:
+                rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "The transaction's authorizationList is not a list.")
+    elif kind == "authorization":
+        source, auth = obj
+        if source == "request":
+            rep.add("NONSTANDARD_AUTH_REQUEST", "MEDIUM",
+                    "There is no standard way for a website to ask for an EIP-7702 authorization signature. "
+                    "Legitimate wallets only create one inside their own account-upgrade flow.")
+        decoded = _authorization(auth, chain_id, lookups, rep)
     elif kind == "typed":
         decoded = _analyze_typed(obj, chain_id, lookups, rep)
     elif kind == "message":
@@ -162,6 +200,75 @@ def _check_time(ts, now, rep, code, what):
         rep.add(code, "MEDIUM", f"{what} never expires.")
     elif ts > now + LONG_WINDOW:
         rep.add(code, "MEDIUM", f"{what} is valid for more than 30 days ({(ts - now) // 86400} days).")
+
+
+# ---------------------------------------------------------------- EIP-7702 authorizations
+
+_DELEGATE_REASON = {
+    "nocode": " It has no code on that chain, so the delegation points at nothing, or at whatever gets deployed there later.",
+    "eoa": " It is not a contract.",
+    "unverified": " Its source is not verified on Sourcify.",
+    "unknown": "",
+    "verified": " It is not one of the widely used wallet implementations.",
+}
+
+
+def _authorization(a, chain_id, lookups, rep):
+    if not _is_authorization(a):
+        rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "An EIP-7702 authorization entry is missing chainId, address or nonce.")
+        return None
+    raw = a.get("address", a.get("contractAddress"))
+    delegate = _addr(raw)
+    try:
+        if any(a.get(k) is None or isinstance(a.get(k), bool) for k in ("chainId", "nonce")):
+            raise ValueError
+        auth_chain, nonce = _int(a["chainId"]), _int(a["nonce"])
+        if not (0 <= auth_chain <= MAX_UINT256 and 0 <= nonce < 2**64):
+            raise ValueError
+    except (TypeError, ValueError):
+        rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "An EIP-7702 authorization has a chainId or nonce that is not a valid number.")
+        return {"delegate": delegate, "chainId": None, "nonce": None, "known_as": None}
+    entry = {"delegate": delegate, "chainId": auth_chain, "nonce": nonce, "known_as": KNOWN_DELEGATES.get(delegate)}
+    if delegate is None:
+        rep.add("MALFORMED_ADDRESS", "MEDIUM", f"Invalid delegate address in an EIP-7702 authorization: {raw!r}.")
+        return entry
+    if auth_chain == 0:
+        rep.add("AUTH_ALL_CHAINS", "HIGH",
+                "This authorization has chainId 0, so it is valid on every EVM chain: whoever holds it can install "
+                "the same delegation everywhere your account exists.")
+    elif auth_chain != chain_id:
+        rep.add("CHAIN_MISMATCH", "HIGH", f"The authorization is for chain {auth_chain}, not chain {chain_id}.")
+    if delegate == to_checksum_address(ZERO_ADDRESS):
+        rep.add("DELEGATION_REVOKE", "INFO", "Delegates to the zero address: this clears your account's EIP-7702 delegation (a revoke).")
+        return entry
+    where = "every chain" if auth_chain == 0 else f"chain {auth_chain}"
+    lookup_chain = chain_id if auth_chain == 0 else auth_chain
+    kind = lookups.code_kind(lookup_chain, delegate)
+    if kind is None:
+        rep.add("LOOKUP_UNAVAILABLE", "INFO", f"Could not check whether the delegate {delegate} is a contract.")
+        status = "unknown"
+    elif kind == "none":
+        status = "nocode"
+    elif kind == "7702":
+        status = "eoa"
+    else:
+        verified = lookups.sourcify_verified(lookup_chain, delegate)
+        if verified is None:
+            rep.add("LOOKUP_UNAVAILABLE", "INFO", f"Could not check source verification of the delegate {delegate}.")
+            status = "unknown"
+        else:
+            status = "verified" if verified else "unverified"
+    known = entry["known_as"]
+    if known and status == "verified":
+        rep.add("EIP7702_DELEGATION", "MEDIUM",
+                f"Delegates your account to {known} ({delegate}), a widely used wallet implementation. This gives that "
+                f"contract full control of your account on {where}. Only sign this inside your wallet's own upgrade flow.")
+    else:
+        name = f" ({known}, but unconfirmed)" if known else ""
+        rep.add("EIP7702_DELEGATION", "HIGH",
+                f"Delegates your account to {delegate}{name}. This gives the contract full control of your account on "
+                f"{where}: it can move all your assets at any time.{_DELEGATE_REASON[status]} Wallet drainers use exactly this.")
+    return entry
 
 
 # ---------------------------------------------------------------- transactions

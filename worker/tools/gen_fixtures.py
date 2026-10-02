@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.join(PY, "tests"))
 
 from eth_abi import encode  # noqa: E402
 
-from conftest import (DELEGATED, EOA, FRESH, NOW, ROUTER, SHADY, SIGNER, TOKEN, UNKNOWN_ADDR,  # noqa: E402
-                      FakeLookups, calldata)
+from conftest import (DELEGATED, EOA, FRESH, MM_DELEGATOR, NOW, ROUTER, SHADY, SIGNER, SIMPLE7702, TOKEN,  # noqa: E402
+                      UNKNOWN_ADDR, FakeLookups, calldata)
 from joi_presign.abi import selector  # noqa: E402
 from joi_presign.core import PERMIT2, analyze  # noqa: E402
 
@@ -43,6 +43,15 @@ def seaport(offerer, consideration):
             "message": {"offerer": offerer,
                         "offer": [{"itemType": 2, "token": TOKEN, "identifierOrCriteria": "7", "startAmount": "1", "endAmount": "1"}],
                         "consideration": consideration}}
+
+
+def type4(*auths, chain=1):
+    return {"type": "0x4", "chainId": chain, "from": SIGNER, "to": SIGNER, "value": "0x0", "data": "0x",
+            "authorizationList": list(auths)}
+
+
+def auth(address, chain=1, nonce=0, key="address"):
+    return {key: address, "chainId": chain, "nonce": nonce, "yParity": "0x0", "r": "0x01", "s": "0x02"}
 
 
 A = lambda to, amt: calldata("approve(address,uint256)", ["address", "uint256"], [to, amt])  # noqa: E731
@@ -114,6 +123,26 @@ CASES = {
     "personal_sign_plain": ({"method": "personal_sign", "params": ["hello world", SIGNER]}, 1),
     "unrecognized_object": ({"hello": 1}, 1),
     "unrecognized_list": ([1, 2], 1),
+    "7702_known_verified": (type4(auth(MM_DELEGATOR, nonce=5)), 1),
+    "7702_unverified": (type4(auth(SHADY)), 1),
+    "7702_verified_not_listed": (type4(auth(ROUTER)), 1),
+    "7702_listed_unverified": (type4(auth(SIMPLE7702)), 1),
+    "7702_chain_zero": (type4(auth(MM_DELEGATOR, chain=0)), 1),
+    "7702_revoke": (type4(auth("0x" + "00" * 20)), 1),
+    "7702_nocode_and_delegated": (type4(auth(EOA), auth(DELEGATED)), 1),
+    "7702_other_chain": (type4(auth(MM_DELEGATOR, chain=8453)), 1),
+    "7702_lookups_fail": (type4(auth(UNKNOWN_ADDR)), 1),
+    "7702_standalone_object": ({"address": SHADY, "chainId": "0x1", "nonce": "0x0"}, 1),
+    "7702_request": ({"method": "wallet_signAuthorization", "params": [auth(MM_DELEGATOR, nonce=3, key="contractAddress")]}, 1),
+    "7702_in_jsonrpc_tx": ({"method": "eth_sendTransaction", "params": [type4(auth(SHADY))]}, 1),
+    "7702_missing_fields": (type4({"address": SHADY}), 1),
+    "7702_negative_nonce": (type4(auth(SHADY, nonce=-1)), 1),
+    "7702_null_chain": (type4({"address": SHADY, "chainId": None, "nonce": 0}), 1),
+    "7702_bool_chain": (type4(auth(SHADY, chain=True)), 1),
+    "7702_list_not_list": ({**type4(), "authorizationList": "nope"}, 1),
+    "7702_bad_delegate": (type4(auth("0x1234")), 1),
+    "7702_hex_negative_chain": (type4(auth(SHADY, chain="-0x1")), 1),
+    "7702_request_without_auth": ({"method": "wallet_signAuthorization", "params": ["0x1234"]}, 1),
 }
 
 for name in sorted(os.listdir(os.path.join(PY, "examples"))):

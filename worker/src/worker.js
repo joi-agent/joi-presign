@@ -60,8 +60,9 @@ function about(cfg) {
 ${DESCRIPTION}
 
 POST /check?chain=base|ethereum|arbitrum  (JSON body)
-  Body: an unsigned transaction {chainId, from, to, value, data}, EIP-712 typed data, or a JSON-RPC
-  request (eth_sendTransaction, eth_signTypedData_v4, personal_sign, eth_sign).
+  Body: an unsigned transaction {chainId, from, to, value, data} (type-4 with authorizationList included),
+  EIP-712 typed data, an EIP-7702 authorization {chainId, address, nonce}, or a JSON-RPC request
+  (eth_sendTransaction, eth_signTypedData_v4, personal_sign, eth_sign).
   Returns {kind, chain_id, risk: LOW|MEDIUM|HIGH, findings[], decoded}. Large integers are decimal strings.
 Price: ${price} USDC per check on Base, paid with x402 (v2 PAYMENT-SIGNATURE or v1 X-PAYMENT header).
   Without payment you get HTTP 402 with the payment requirements. Bad input is rejected for free.

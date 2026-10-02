@@ -16,6 +16,19 @@ const PERMIT2_TYPES = new Set([
   "PermitSingle", "PermitBatch", "PermitTransferFrom", "PermitBatchTransferFrom",
   "PermitWitnessTransferFrom", "PermitBatchWitnessTransferFrom",
 ]);
+const ZERO_ADDRESS = "0x" + "00".repeat(20);
+// Widely used EIP-7702 delegate implementations. Sources: the "known implementations" table on
+// ethereum.org/roadmap/pectra/7702 (checked 2026-10-02), except Coinbase's proxy, from the
+// base/eip-7702-proxy README. Being listed is not enough: the delegate must also be verified on Sourcify.
+export const KNOWN_DELEGATES = {
+  "0x000000009B1D0aF20D8C6d0A44e162d11F9b8f00": "Uniswap Calibur",
+  "0x69007702764179f14F51cdce752f4f775d74E139": "Alchemy Modular Account",
+  "0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d": "Ambire account",
+  "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B": "MetaMask EIP7702StatelessDeleGator",
+  "0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9": "Simple7702Account (Ethereum Foundation AA team)",
+  "0x17c11FDdADac2b341F2455aFe988fec4c3ba26e3": "Luganodes Pectra batch contract",
+  "0x7702cb554e6bFb442cb743A7dF23154544a7176C": "Coinbase EIP7702Proxy",
+};
 
 class Report {
   constructor() { this.findings = []; }
@@ -88,17 +101,49 @@ export function classify(payload) {
     const msgs = candidates.filter((p) => typeof p === "string" && !(isAddress(p) && p.length === 42));
     return ["message", [method, msgs.length ? msgs[0] : ""]];
   }
+  if (method && (method.startsWith("eth_") || method.startsWith("wallet_")) && method.toLowerCase().includes("authorization")) {
+    for (const p of [...params, payload.authorization]) {
+      if (isAuthorization(p)) return ["authorization", ["request", p]];
+    }
+    return ["unknown", payload];
+  }
   if ("types" in payload && "primaryType" in payload) return ["typed", payload];
+  if (isAuthorization(payload) && !("to" in payload || "data" in payload || "input" in payload)) {
+    return ["authorization", ["object", payload]];
+  }
   if ("to" in payload || "data" in payload || "input" in payload) return ["tx", payload];
   return ["unknown", payload];
+}
+
+// An EIP-7702 authorization: {chainId, address (viem: contractAddress), nonce, ...signature}.
+function isAuthorization(p) {
+  return p !== null && typeof p === "object" && !Array.isArray(p) && ("address" in p || "contractAddress" in p) && "chainId" in p && "nonce" in p;
 }
 
 export async function analyze(payload, chainId, lookups) {
   const rep = new Report();
   const [kind, obj] = classify(payload);
   let decoded;
-  if (kind === "tx") decoded = await analyzeTx(obj, chainId, lookups, rep, 0, 0);
-  else if (kind === "typed") decoded = await analyzeTyped(obj, chainId, lookups, rep);
+  if (kind === "tx") {
+    decoded = await analyzeTx(obj, chainId, lookups, rep, 0, 0);
+    if (obj !== null && typeof obj === "object" && !Array.isArray(obj) && "authorizationList" in obj) {
+      const auths = obj.authorizationList;
+      if (Array.isArray(auths)) {
+        decoded.authorizations = [];
+        for (const a of auths) decoded.authorizations.push(await authorization(a, chainId, lookups, rep));
+      } else {
+        rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "The transaction's authorizationList is not a list.");
+      }
+    }
+  } else if (kind === "authorization") {
+    const [source, auth] = obj;
+    if (source === "request") {
+      rep.add("NONSTANDARD_AUTH_REQUEST", "MEDIUM",
+        "There is no standard way for a website to ask for an EIP-7702 authorization signature. " +
+        "Legitimate wallets only create one inside their own account-upgrade flow.");
+    }
+    decoded = await authorization(auth, chainId, lookups, rep);
+  } else if (kind === "typed") decoded = await analyzeTyped(obj, chainId, lookups, rep);
   else if (kind === "message") decoded = analyzeMessage(obj, rep);
   else {
     decoded = null;
@@ -173,6 +218,90 @@ function checkTime(ts, now, rep, code, what) {
   else if (ts > now + LONG_WINDOW) {
     rep.add(code, "MEDIUM", `${what} is valid for more than 30 days (${(ts - now) / 86400n} days).`);
   }
+}
+
+// ---------------------------------------------------------------- EIP-7702 authorizations
+
+const DELEGATE_REASON = {
+  nocode: " It has no code on that chain, so the delegation points at nothing, or at whatever gets deployed there later.",
+  eoa: " It is not a contract.",
+  unverified: " Its source is not verified on Sourcify.",
+  unknown: "",
+  verified: " It is not one of the widely used wallet implementations.",
+};
+
+// Python's repr() for the values that can appear here.
+const pyRepr = (v) => (typeof v === "string" ? `'${v}'` : v === null || v === undefined ? "None"
+  : typeof v === "boolean" ? (v ? "True" : "False") : JSON.stringify(v));
+
+async function authorization(a, chainId, lookups, rep) {
+  if (!isAuthorization(a)) {
+    rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "An EIP-7702 authorization entry is missing chainId, address or nonce.");
+    return null;
+  }
+  const raw = "address" in a ? a.address : a.contractAddress;
+  const delegate = addr(raw);
+  let authChain, nonce;
+  try {
+    for (const k of ["chainId", "nonce"]) {
+      if (a[k] === null || a[k] === undefined || typeof a[k] === "boolean") throw new BadInput(k);
+    }
+    authChain = int(a.chainId);
+    nonce = int(a.nonce);
+    if (!(authChain >= 0n && authChain <= MAX_UINT256 && nonce >= 0n && nonce < (1n << 64n))) throw new BadInput("range");
+  } catch (e) {
+    if (!(e instanceof BadInput)) throw e;
+    rep.add("MALFORMED_AUTHORIZATION", "MEDIUM", "An EIP-7702 authorization has a chainId or nonce that is not a valid number.");
+    return { delegate, chainId: null, nonce: null, known_as: null };
+  }
+  const entry = { delegate, chainId: plain(authChain), nonce: plain(nonce), known_as: KNOWN_DELEGATES[delegate] ?? null };
+  if (delegate === null) {
+    rep.add("MALFORMED_ADDRESS", "MEDIUM", `Invalid delegate address in an EIP-7702 authorization: ${pyRepr(raw)}.`);
+    return entry;
+  }
+  if (authChain === 0n) {
+    rep.add("AUTH_ALL_CHAINS", "HIGH",
+      "This authorization has chainId 0, so it is valid on every EVM chain: whoever holds it can install " +
+      "the same delegation everywhere your account exists.");
+  } else if (authChain !== BigInt(chainId)) {
+    rep.add("CHAIN_MISMATCH", "HIGH", `The authorization is for chain ${authChain}, not chain ${chainId}.`);
+  }
+  if (delegate === ZERO_ADDRESS) {
+    rep.add("DELEGATION_REVOKE", "INFO", "Delegates to the zero address: this clears your account's EIP-7702 delegation (a revoke).");
+    return entry;
+  }
+  const where = authChain === 0n ? "every chain" : `chain ${authChain}`;
+  const lookupChain = authChain === 0n ? chainId : Number(authChain);
+  const kind = await lookups.codeKind(lookupChain, delegate);
+  let status;
+  if (kind === null) {
+    rep.add("LOOKUP_UNAVAILABLE", "INFO", `Could not check whether the delegate ${delegate} is a contract.`);
+    status = "unknown";
+  } else if (kind === "none") {
+    status = "nocode";
+  } else if (kind === "7702") {
+    status = "eoa";
+  } else {
+    const verified = await lookups.sourcifyVerified(lookupChain, delegate);
+    if (verified === null) {
+      rep.add("LOOKUP_UNAVAILABLE", "INFO", `Could not check source verification of the delegate ${delegate}.`);
+      status = "unknown";
+    } else {
+      status = verified ? "verified" : "unverified";
+    }
+  }
+  const known = entry.known_as;
+  if (known && status === "verified") {
+    rep.add("EIP7702_DELEGATION", "MEDIUM",
+      `Delegates your account to ${known} (${delegate}), a widely used wallet implementation. This gives that ` +
+      `contract full control of your account on ${where}. Only sign this inside your wallet's own upgrade flow.`);
+  } else {
+    const name = known ? ` (${known}, but unconfirmed)` : "";
+    rep.add("EIP7702_DELEGATION", "HIGH",
+      `Delegates your account to ${delegate}${name}. This gives the contract full control of your account on ` +
+      `${where}: it can move all your assets at any time.${DELEGATE_REASON[status]} Wallet drainers use exactly this.`);
+  }
+  return entry;
 }
 
 // ---------------------------------------------------------------- transactions

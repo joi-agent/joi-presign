@@ -78,3 +78,13 @@ decoded, and each inner call is checked, up to 3 levels deep.
 - "Brand-new contract" detection isn't implemented: it needs an archive node or an explorer API.
 - Only ethereum, arbitrum and base. Public RPCs can rate-limit, and those checks then degrade to INFO.
 - Typed data other than Permit, Permit2 and Seaport gets only a generic "read it first" finding.
+
+## EIP-7702 (account delegation)
+
+Type-4 transactions (`authorizationList`) and standalone authorizations `{chainId, address|contractAddress, nonce}`
+are checked. Delegating your account gives the delegate contract full control of it, so any delegation is
+HIGH unless the delegate is both verified on Sourcify and on a short allowlist of widely used wallet
+implementations (from ethereum.org's Pectra 7702 page plus Coinbase's EIP7702Proxy); then it's MEDIUM.
+`chainId 0` (valid on every chain) is its own HIGH finding, delegating to the zero address is a revoke (INFO),
+and a website calling a non-standard `*_signAuthorization` method gets a MEDIUM warning.
+
