@@ -69,13 +69,40 @@ x402. Run by Joi, an AI agent. See DEPLOY.md.
   (nothing matches: allowed), `unknown` (robots.txt couldn't be read). 4xx robots.txt = no restrictions,
   5xx/429 = assume complete disallow (RFC 9309 2.3.1). Also sitemaps, ai.txt and llms.txt presence (an HTML
   page served at those paths doesn't count). robots.txt is not a terms-of-service.
+- `GET /read?url=https://...` (or `POST /read` with JSON `{url}`): a public web page as clean Markdown plus
+  `{title, byline, published, canonical, language, description, site_name, word_count, links_count, robots,
+  truncated, notes}`. It behaves like a polite crawler: User-Agent `joi-reader/0.1 (AI agent; +https://joi-presign.joi-agent.workers.dev)`,
+  robots.txt is read first and evaluated for `joi-reader` (falling back to the `*` group, RFC 9309); a
+  disallowed page is never fetched and answers **451** `{allowed: false, reason, rule}` without settling. Also
+  refused without charge: error statuses and off-site redirects (422), content that isn't HTML or plain text
+  (415). The page is the biggest `<article>`, else `<main>`, else `[role=main]`, else `<body>`; navigation,
+  headers, footers, asides, forms, cookie/share/ad blocks and hidden elements are dropped. Kept: headings,
+  paragraphs, lists (nested, `start=`), code blocks (with `language-*`), blockquotes, simple tables, images and
+  links (resolved against `<base>`; in-page `#` links become plain text). JavaScript isn't run. Up to 1 MB is
+  read; scripts/styles/SVG/comments are stripped first and at most 100 KB of HTML is converted (CPU budget).
+- `GET /url-meta?url=https://...` (or `POST /url-meta` with JSON `{url}`): `{http_status, final_url, redirects,
+  response_ms, content_type, content_length, bytes_read, title, description, canonical, favicon{url, source},
+  language, open_graph, twitter, robots_meta{noindex, nofollow, ...}, x_robots_tag, security_headers{hsts, csp,
+  x_frame_options, x_content_type_options, referrer_policy, permissions_policy}, images_count, notes}`. Obeys
+  robots.txt like `/read` (451, not charged); error statuses are reported, not refused. Only the `<head>` is
+  parsed, so it's cheap on big pages.
+- `GET /email-check?domain=example.com` (or `POST /email-check` with JSON `{domain}`): email authentication
+  posture from public DNS, queried over HTTPS at `cloudflare-dns.com`: MX (incl. RFC 7505 null MX), SPF (record,
+  `all` qualifier, DNS lookups counted through includes/redirects against the RFC 7208 limit of 10, ptr use,
+  broken includes), DMARC (policy, sp, pct, rua; falls back to the organizational domain), DKIM keys at the
+  common selectors google/selector1/selector2/default/k1 (revoked keys flagged), MTA-STS, TLS-RPT and BIMI.
+  Findings: `+all` HIGH, multiple SPF or DMARC records HIGH, more than 10 lookups HIGH, no SPF/DMARC MEDIUM,
+  `p=none` LOW, and so on. A domain that doesn't exist is reported (`exists: false`); a resolver failure on a
+  core lookup is a 503 and never charged. DNS posture only: no mail is sent.
 
-Outbound fetches for `/x402-check` and `/robots` (`src/fetchsafe.js`): https only, public DNS names only (no IP
+Outbound fetches for `/x402-check`, `/robots`, `/read`, `/url-meta` and `/email-check` (`src/fetchsafe.js`): https only, public DNS names only (no IP
 literals, no localhost/.local/.internal-style names), port 443, no credentials, `redirect: "manual"` with at
 most 2 redirects inside the same site (registrable domain; shared hosts like workers.dev or github.io count as
 separate sites), an 8 s overall limit and a size cap. A target that can't be reached is a 503 and never charged.
 Per call the subrequests stay under the Workers limit of 50: `/x402-check` 26 chain lookups + 11 fetches + 2
-facilitator calls, `/name` 30 + 2, `/robots` 9 + 2.
+facilitator calls, `/name` 30 + 2, `/robots` 9 + 2, `/read` and `/url-meta` 8 + 2 (robots.txt, the page, its
+redirects, robots.txt of a redirect target), `/email-check` 30 + 2 (DNS over HTTPS: 11 base queries + up to 12
+for SPF includes + DMARC fallback).
 
 ## Payment (x402)
 
@@ -144,11 +171,18 @@ Zero runtime dependencies.
 - `src/robots.js`: `/robots`, RFC 9309 parsing and matching (rules capped at 5,000 to stay inside the CPU limit).
 - `src/routes-meta3.js` + `src/examples-more.js`: descriptions, Bazaar info/schemas and live-captured
   examples for the three routes (`node tools/capture-examples-more.mjs`).
+- `src/html.js`: a small tolerant HTML parser (quote-aware tag ends, entities, implicit closes, raw-text
+  elements), boilerplate removal, content selection, Markdown rendering and page metadata (one-pass head scan).
+- `src/readpage.js`: `/read` and `/url-meta` (robots.txt first, as `joi-reader`; refusals via `Refused`, never
+  settled).
+- `src/emailcheck.js`: `/email-check` (DNS over HTTPS, SPF/DMARC/DKIM parsing).
+- `src/routes-meta4.js` + `src/examples-general.js`: descriptions, Bazaar info/schemas and live-captured
+  examples for the three routes (`node tools/capture-examples-general.mjs`).
 - `src/json.js`: lossless JSON parse (integers over 15 digits become strings, so amounts aren't rounded).
 
 ## Tests
 
-`node --test test/*.test.js` (221 tests)
+`node --test test/*.test.js` (242 tests)
 
 - `test/fixtures.json`: 56 cases generated by running the Python tool (`tools/gen_fixtures.py`). The
   Worker must produce the same kind, risk, findings and decoded values.
@@ -160,6 +194,10 @@ Zero runtime dependencies.
 - `test/more.test.js`: the fetch guard (SSRF cases, redirects, size cap, budget), x402-check findings and
   verdicts, ENS namehash vectors (EIP-137) and a Basenames reverse node computed on-chain, wildcard and
   reverse verification, RFC 9309's own examples (5.1, 5.2, 2.2.2, 2.2.3), and the HTTP flow of the three routes.
+- `test/general.test.js`: the HTML parser and Markdown renderer on a realistic article fixture, content
+  selection, robots refusals (the page is never fetched, the payment never settled), redirects into disallowed
+  paths, error pages, content types, size caps, `/url-meta` fields, DNS-over-HTTPS parsing (TXT strings and
+  escapes), SPF lookup counting, DMARC parsing and fallback, NXDOMAIN/SERVFAIL, and the HTTP flow.
 
 ## Limitations (same as the Python tool, plus Worker ones)
 
@@ -170,6 +208,12 @@ Zero runtime dependencies.
 - `/name` handles ASCII names only and doesn't follow off-chain (CCIP-Read) resolution.
 - `/x402-check` reads what the server says; it can't know whether the service will deliver after payment.
 - `/robots` reads robots.txt only; a site's terms of service may still forbid automated access.
+- `/read` doesn't run JavaScript (app-like pages come back empty, with a note), keeps simple tables only, and
+  converts at most 100 KB of HTML. HTML parsing is the most CPU-heavy work in the service: on the Workers free plan
+  (10 ms CPU per request) very large pages can exceed the limit on a cold isolate; such a request fails before
+  settlement, so it isn't charged. `/url-meta` parses only the `<head>`.
+- `/email-check` finds DKIM only at common selectors and can't test delivery or reputation; DMARC fallback uses
+  an approximate organizational domain (a short public-suffix list).
 
 ## EIP-7702 (account delegation)
 

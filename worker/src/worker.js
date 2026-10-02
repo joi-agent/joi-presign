@@ -14,7 +14,10 @@ import {
 } from "./routes-meta.js";
 import { parseScreenTarget, screenAddress } from "./screen.js";
 import { parsePriceTarget, readPrice, supportedPairs } from "./price.js";
-import { SafeFetcher } from "./fetchsafe.js";
+import { Refused, SafeFetcher } from "./fetchsafe.js";
+import { parsePageTarget, readPage, urlMeta } from "./readpage.js";
+import { emailCheck, parseEmailTarget } from "./emailcheck.js";
+import { BAZAAR_EMAIL, BAZAAR_READ, BAZAAR_URLMETA, EMAIL_DESCRIPTION, READ_DESCRIPTION, URLMETA_DESCRIPTION } from "./routes-meta4.js";
 import { parseX402CheckTarget, x402Check } from "./x402check.js";
 import { parseNameTarget, resolveName } from "./ens.js";
 import { AGENTS, parseRobotsTarget, checkRobots } from "./robots.js";
@@ -95,6 +98,9 @@ ${PRICE_DESCRIPTION}
 ${X402CHECK_DESCRIPTION}
 ${NAME_DESCRIPTION}
 ${ROBOTS_DESCRIPTION}
+${READ_DESCRIPTION}
+${URLMETA_DESCRIPTION}
+${EMAIL_DESCRIPTION}
 
 POST /check?chain=base|ethereum|arbitrum  (JSON body)
   Body: an unsigned transaction {chainId, from, to, value, data} (type-4 with authorizationList included),
@@ -133,6 +139,18 @@ GET /name?name=vitalik.eth  or  GET /name?address=0x...  (or POST /name with JSO
 GET /robots?url=https://...[&agent=YourBot]  (or POST /robots with JSON {url, agent?})
   Returns {robots_found, results{agent: allowed|disallowed|no rule|unknown}, details, sitemaps, ai_txt, llms_txt}
   for ${AGENTS.join(", ")} and your agent. robots.txt is not a terms-of-service.
+GET /read?url=https://...  (or POST /read with JSON {url})
+  Fetches the page as "joi-reader" after checking robots.txt (a disallowed page is never fetched: HTTP 451, not
+  charged; error pages and non-HTML are refused too, not charged). Returns {title, byline, published, canonical,
+  language, word_count, links_count, markdown, robots, truncated, notes}. HTML and plain text only, 1 MB max; very
+  large pages are converted in part. JavaScript is not run.
+GET /url-meta?url=https://...  (or POST /url-meta with JSON {url})
+  Returns {http_status, final_url, redirects, response_ms, content_type, content_length, title, description, canonical,
+  favicon, language, open_graph, twitter, robots_meta, x_robots_tag, security_headers, images_count, notes}.
+  Obeys robots.txt like /read.
+GET /email-check?domain=example.com  (or POST /email-check with JSON {domain})
+  DNS over HTTPS: {mx, spf{record, all, lookups}, dmarc{policy, rua...}, dkim{found[]}, mta_sts, tls_rpt, bimi, risk,
+  findings[]}. DNS posture only: no mail is sent; DKIM is only found at common selectors.
 Price: ${price} USDC per call (any endpoint) on Base, paid with x402 (v2 PAYMENT-SIGNATURE or v1
   X-PAYMENT header). Without payment you get HTTP 402 with the payment requirements. Bad input is
   rejected for free, and failed lookups are never charged.
@@ -148,12 +166,13 @@ Request bodies are not stored.
 `;
 }
 
-function getPostPaths(path, { summary, description, pay, params, bodySchema, example, input, errors }) {
+function getPostPaths(path, { summary, description, pay, params, bodySchema, example, input, errors, extra = {} }) {
   const responses = (withExample) => ({
     "200": withExample ? { description: "Result", content: { "application/json": { example } } } : { description: "Result" },
     "400": { description: errors["400"] },
     "402": { description: "Payment Required (x402)" },
     "503": { description: errors["503"] },
+    ...Object.fromEntries(Object.entries(extra).map(([k, v]) => [k, { description: v }])),
   });
   return {
     [path]: {
@@ -178,7 +197,7 @@ export function openapi(cfg, origin) {
     info: {
       title: "joi-presign",
       version: "0.1.0",
-      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} ${SCREEN_DESCRIPTION} ${PRICE_DESCRIPTION} ${X402CHECK_DESCRIPTION} ${NAME_DESCRIPTION} ${ROBOTS_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
+      description: `${DESCRIPTION} ${CONTRACT_DESCRIPTION} ${TX_DESCRIPTION} ${VERIFY_DESCRIPTION} ${TOKEN_DESCRIPTION} ${SCREEN_DESCRIPTION} ${PRICE_DESCRIPTION} ${X402CHECK_DESCRIPTION} ${NAME_DESCRIPTION} ${ROBOTS_DESCRIPTION} ${READ_DESCRIPTION} ${URLMETA_DESCRIPTION} ${EMAIL_DESCRIPTION} Second opinions, not guarantees: no simulation, no asset pricing, no code audit. Request bodies are not stored.`,
       contact: { name: "Joi (AI agent)", email: "joi-ai@agentmail.to" },
     },
     servers: [{ url: origin }],
@@ -219,6 +238,38 @@ export function openapi(cfg, origin) {
         example: BAZAAR_ROBOTS.info.output.example,
         input: BAZAAR_ROBOTS.info.input.queryParams,
         errors: { "400": "Not an https URL with a public host name, or a bad agent token (never charged)", "503": "The site couldn't be reached (never charged)" },
+      }),
+      ...getPostPaths("/read", {
+        summary: "Read a web page as clean Markdown with metadata (robots.txt obeyed)",
+        description: READ_DESCRIPTION,
+        pay,
+        params: [{ name: "url", in: "query", required: true, schema: { type: "string", format: "uri", pattern: "^https://" } }],
+        bodySchema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri", pattern: "^https://" } } },
+        example: BAZAAR_READ.info.output.example,
+        input: BAZAAR_READ.info.input.queryParams,
+        errors: { "400": "Not an https URL with a public host name (never charged)", "503": "The site couldn't be reached (never charged)" },
+        extra: { "451": "robots.txt disallows the page for joi-reader; not fetched, never charged", "422": "The page answered an error status or redirected off-site (never charged)", "415": "Not HTML or plain text (never charged)" },
+      }),
+      ...getPostPaths("/url-meta", {
+        summary: "Metadata for a URL: status, title, OpenGraph, favicon, security headers",
+        description: URLMETA_DESCRIPTION,
+        pay,
+        params: [{ name: "url", in: "query", required: true, schema: { type: "string", format: "uri", pattern: "^https://" } }],
+        bodySchema: { type: "object", required: ["url"], properties: { url: { type: "string", format: "uri", pattern: "^https://" } } },
+        example: BAZAAR_URLMETA.info.output.example,
+        input: BAZAAR_URLMETA.info.input.queryParams,
+        errors: { "400": "Not an https URL with a public host name (never charged)", "503": "The site couldn't be reached (never charged)" },
+        extra: { "451": "robots.txt disallows the page for joi-reader; not fetched, never charged" },
+      }),
+      ...getPostPaths("/email-check", {
+        summary: "Email authentication posture of a domain (MX, SPF, DMARC, DKIM, MTA-STS)",
+        description: EMAIL_DESCRIPTION,
+        pay,
+        params: [{ name: "domain", in: "query", required: true, schema: { type: "string", pattern: "^[A-Za-z0-9.-]{3,253}$" } }],
+        bodySchema: { type: "object", required: ["domain"], properties: { domain: { type: "string", pattern: "^[A-Za-z0-9.-]{3,253}$" } } },
+        example: BAZAAR_EMAIL.info.output.example,
+        input: BAZAAR_EMAIL.info.input.queryParams,
+        errors: { "400": "Not a valid public domain name (never charged)", "503": "DNS lookup unavailable (never charged)" },
       }),
       "/screen": {
         get: {
@@ -510,6 +561,10 @@ async function paidFlow(route, request, cfg, resourceUrl, deps, run, opts = {}) 
     report = await run(deps.lookups ? deps.lookups() : new NetLookups({ fetchFn: deps.fetch, ...(opts.maxRequests ? { maxRequests: opts.maxRequests } : {}) }));
   } catch (e) {
     // Not settled, so the payer is not charged.
+    if (e instanceof Refused) {
+      logOutcome(route, `refused:${e.status}`);
+      return json(e.status, e.body);
+    }
     if (e instanceof BadInput) {
       logOutcome(route, "bad_input");
       return json(400, { error: e.message });
@@ -673,6 +728,45 @@ async function handleRobots(request, env, deps) {
     () => checkRobots(target, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 9, maxBytes: 512 * 1024 })), { maxRequests: 1 });
 }
 
+async function handleRead(request, env, deps) {
+  const route = "/read";
+  const cfg = { ...config(env), description: READ_DESCRIPTION, bazaar: BAZAAR_READ };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["url"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parsePageTarget(r.params.url);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps,
+    () => readPage(target, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 8, maxBytes: 1024 * 1024 })), { maxRequests: 1 });
+}
+
+async function handleUrlMeta(request, env, deps) {
+  const route = "/url-meta";
+  const cfg = { ...config(env), description: URLMETA_DESCRIPTION, bazaar: BAZAAR_URLMETA };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["url"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parsePageTarget(r.params.url);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps,
+    () => urlMeta(target, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 8, maxBytes: 1024 * 1024 })), { maxRequests: 1 });
+}
+
+async function handleEmailCheck(request, env, deps) {
+  const route = "/email-check";
+  const cfg = { ...config(env), description: EMAIL_DESCRIPTION, bazaar: BAZAAR_EMAIL };
+  const url = new URL(request.url);
+  const resourceUrl = url.origin + url.pathname;
+  const r = await readParams(request, ["domain"]);
+  if (r.error) return badInput(route, r.status, r.error);
+  const target = parseEmailTarget(r.params.domain);
+  if (target.error) return badInput(route, 400, target.error);
+  return paidFlow(route, request, cfg, resourceUrl, deps,
+    () => emailCheck(target, new SafeFetcher({ fetchFn: deps.fetch, maxRequests: 30, maxBytes: 64 * 1024 })), { maxRequests: 1 });
+}
+
 // Paid routes and their payment details. An unpaid request to any of them (any method, any input) gets a 402
 // with the requirements, which is what x402 clients and discovery probers expect. Input is validated only once a
 // payment is attached, still before anything is settled, so bad input is never charged.
@@ -687,6 +781,9 @@ const PAID_ROUTES = {
   "/x402-check": { description: X402CHECK_DESCRIPTION, bazaar: BAZAAR_X402CHECK },
   "/name": { description: NAME_DESCRIPTION, bazaar: BAZAAR_NAME },
   "/robots": { description: ROBOTS_DESCRIPTION, bazaar: BAZAAR_ROBOTS },
+  "/read": { description: READ_DESCRIPTION, bazaar: BAZAAR_READ },
+  "/url-meta": { description: URLMETA_DESCRIPTION, bazaar: BAZAAR_URLMETA },
+  "/email-check": { description: EMAIL_DESCRIPTION, bazaar: BAZAAR_EMAIL },
 };
 
 function unpaid402(request, env, url) {
@@ -730,6 +827,9 @@ export async function handle(request, env = {}, deps = {}) {
   if (getOrPost && url.pathname === "/x402-check") return handleX402Check(request, env, deps);
   if (getOrPost && url.pathname === "/name") return handleName(request, env, deps);
   if (getOrPost && url.pathname === "/robots") return handleRobots(request, env, deps);
+  if (getOrPost && url.pathname === "/read") return handleRead(request, env, deps);
+  if (getOrPost && url.pathname === "/url-meta") return handleUrlMeta(request, env, deps);
+  if (getOrPost && url.pathname === "/email-check") return handleEmailCheck(request, env, deps);
   return json(404, { error: "not found. See GET /" });
 }
 

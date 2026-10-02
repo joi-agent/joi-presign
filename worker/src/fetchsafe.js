@@ -6,6 +6,16 @@ import { LookupUnavailable } from "./profile.js";
 
 export class UnsafeUrl extends Error {}
 
+/** The run can't or mustn't proceed for a reason about the target (robots.txt disallow, wrong content type, error
+ *  page). The route answers `status` with `body` and the payment is never settled. */
+export class Refused extends Error {
+  constructor(status, body) {
+    super(body && body.reason ? body.reason : "refused");
+    this.status = status;
+    this.body = body;
+  }
+}
+
 const BLOCKED_SUFFIXES = [
   ".localhost", ".local", ".internal", ".intranet", ".lan", ".home", ".home.arpa", ".corp", ".private",
   ".test", ".example", ".invalid", ".onion", ".arpa", ".localdomain",
