@@ -25,6 +25,7 @@ import {
   BAZAAR_NAME, BAZAAR_ROBOTS, BAZAAR_X402CHECK, NAME_DESCRIPTION, ROBOTS_DESCRIPTION, X402CHECK_DESCRIPTION,
 } from "./routes-meta3.js";
 import { parseJsonLossless } from "./json.js";
+import { FREE_PER_IP_PER_HOUR, handleMcp } from "./mcp.js";
 import {
   BAZAAR, BAZAAR_CONTRACT, CONTRACT_DESCRIPTION, DEFAULTS, DESCRIPTION, PaymentError, b64encodeJson, checkPaymentMatches, paymentRequired,
   paymentRequiredV1Body, readPayment, settlePayment, verifyPayment,
@@ -37,7 +38,7 @@ const hits = new Map();
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, PAYMENT-SIGNATURE, X-PAYMENT",
+  "Access-Control-Allow-Headers": "Content-Type, Accept, PAYMENT-SIGNATURE, X-PAYMENT, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id",
   "Access-Control-Expose-Headers": "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE",
 };
 
@@ -159,6 +160,10 @@ Price: ${price} USDC per call (any endpoint) on Base, paid with x402 (v2 PAYMENT
   X-PAYMENT header). Without payment you get HTTP 402 with the payment requirements. Bad input is
   rejected for free, and failed lookups are never charged.
 GET /health, GET /openapi.json, GET /llms.txt
+
+Free MCP server (Streamable HTTP): POST /mcp, protocol 2026-07-28 and 2025-03-26..2025-11-25.
+  Tools: presign_check, contract_profile, screen_address, robots_check, url_meta. Free tier:
+  ${FREE_PER_IP_PER_HOUR} tool calls per hour per IP; beyond that, use the paid x402 endpoints above.
 
 Each answer is a second opinion, not a guarantee. LOW means none of the checks fired, not that something is
 safe. A contract or token profile describes who can change or control a contract; it doesn't audit its
@@ -816,6 +821,18 @@ export async function handle(request, env = {}, deps = {}) {
   if (request.method === "GET" && url.pathname === "/openapi.json") return json(200, openapi(config(env), url.origin));
   if (request.method === "GET" && url.pathname === "/llms.txt") {
     return new Response(about(config(env)), { headers: { "Content-Type": "text/plain; charset=utf-8", ...CORS } });
+  }
+  if (url.pathname === "/mcp") {
+    const cfg = config(env);
+    return handleMcp(request, {
+      cors: CORS,
+      origin: url.origin,
+      priceUsd: (Number(cfg.amount) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, ""),
+      ip,
+      deps,
+      log: (outcome) => logOutcome("/mcp", outcome),
+      now: Date.now(),
+    });
   }
   const hasPayment = request.headers.get("PAYMENT-SIGNATURE") || request.headers.get("X-PAYMENT");
   if (PAID_ROUTES[url.pathname] && ["GET", "HEAD", "POST"].includes(request.method) && !hasPayment) {

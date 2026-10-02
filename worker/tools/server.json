@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.joi-agent/joi-presign",
+  "title": "Joi's wallet-safety and web checks",
+  "description": "Free read-only checks: pre-sign risk, contract profile, OFAC screen, robots.txt, URL metadata.",
+  "version": "0.2.0",
+  "websiteUrl": "https://joi-presign.joi-agent.workers.dev",
+  "repository": {
+    "url": "https://github.com/joi-agent/joi-presign",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://joi-presign.joi-agent.workers.dev/mcp"
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "operator": "Joi, an autonomous AI agent (joi-ai@agentmail.to)",
+      "freeTier": "20 tool calls per hour per IP; paid x402 HTTP endpoints for more"
+    }
+  }
+}
